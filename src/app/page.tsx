@@ -37,7 +37,16 @@ type PatternAnalysis = {
 type AnalyzeResult = {
   success:boolean; symbol:string;
   quote:{name:string; price:number; change:number; changePercent:number; open:number; high:number; low:number; previousClose:number; volume:number};
-  technical:{latestDate:string; latestClose:number; ma5:number; ma20:number; ma60:number; rsi14:number; macd:number; kd:number};
+  technical:{
+    latestDate:string;
+    latestClose:number|null;
+    ma5:number|null;
+    ma20:number|null;
+    ma60:number|null;
+    rsi14:number|null;
+    macd:number|null;
+    kd:number|null;
+  };
   volumeAnalysis?:VolumeAnalysis;
   supportResistance?:SupportResistance;
   chaseRisk?:ChaseRisk;
@@ -60,12 +69,19 @@ const STOCK_NAMES: Record<string,string> = {
   "3034":"聯詠","6669":"緯穎"
 };
 
-function formatNumber(value:number|null|undefined){ if(value===null||typeof value==="undefined") return "-"; return Number(value).toLocaleString("zh-TW",{maximumFractionDigits:2}); }
+function formatNumber(value:number|null|undefined){ if(value===null||typeof value==="undefined"||Number.isNaN(Number(value))) return "-"; return Number(value).toLocaleString("zh-TW",{maximumFractionDigits:2}); }
 function formatPrice(value:number|null|undefined){ return formatNumber(value); }
-function formatPercent(value:number|null|undefined){ if(value===null||typeof value==="undefined") return "-"; return `${Number(value).toFixed(2)}%`; }
-function formatRatio(value:number|null|undefined){ if(value===null||typeof value==="undefined") return "-"; return `${Number(value).toFixed(2)}x`; }
+function formatTech(value:number|null|undefined){
+  if(value===null||typeof value==="undefined"||Number.isNaN(Number(value))) return "資料不足";
+  return Number(value).toFixed(2);
+}
+function isNumberValue(value:number|null|undefined){
+  return value!==null&&typeof value!=="undefined"&&!Number.isNaN(Number(value));
+}
+function formatPercent(value:number|null|undefined){ if(value===null||typeof value==="undefined"||Number.isNaN(Number(value))) return "-"; return `${Number(value).toFixed(2)}%`; }
+function formatRatio(value:number|null|undefined){ if(value===null||typeof value==="undefined"||Number.isNaN(Number(value))) return "-"; return `${Number(value).toFixed(2)}x`; }
 function formatVolumeLots(value:number|null|undefined){
-  if(value===null||typeof value==="undefined") return "-";
+  if(value===null||typeof value==="undefined"||Number.isNaN(Number(value))) return "-";
   const lots=Number(value)/1000;
   const wan=lots/10000;
   if(Math.abs(wan)>=1) return `${wan.toFixed(2)} 萬張`;
@@ -96,8 +112,8 @@ function getAlert(result:AnalyzeResult){
   if(result.tradePlan?.stance.includes("偏多")) alerts.push({label:"📌 有交易計畫",level:"watch",message:"系統已產生觀察區、突破價與停損參考，可依計畫控管風險。"});
   if(result.chaseRisk&&result.chaseRisk.score>=75) alerts.push({label:"🚨 追高高風險",level:"hot",message:"追高風險分數偏高，建議等拉回或站穩突破後再評估。"});
   else if(result.chaseRisk&&result.chaseRisk.score>=55) alerts.push({label:"⚠️ 追高需謹慎",level:"hot",message:"追高風險中高，不建議一次重倉追價。"});
-  if(result.technical.rsi14>=75) alerts.push({label:"⚠️ RSI 過熱",level:"hot",message:"RSI 高於 75，短線可能過熱，不適合無腦追高。"});
-  if(result.technical.kd>=80) alerts.push({label:"⚠️ KD 高檔",level:"hot",message:"KD 高於 80，短線容易震盪或拉回。"});
+  if(isNumberValue(result.technical.rsi14)&&Number(result.technical.rsi14)>=75) alerts.push({label:"⚠️ RSI 過熱",level:"hot",message:"RSI 高於 75，短線可能過熱，不適合無腦追高。"});
+  if(isNumberValue(result.technical.kd)&&Number(result.technical.kd)>=80) alerts.push({label:"⚠️ KD 高檔",level:"hot",message:"KD 高於 80，短線容易震盪或拉回。"});
   if(result.volumeAnalysis?.trend==="bull") alerts.push({label:"📈 放量上攻",level:"bull",message:"量能與價格同步轉強，短線多方訊號較完整。"});
   if(result.volumeAnalysis?.trend==="bear") alerts.push({label:"📉 放量下跌",level:"bear",message:"量能放大但股價下跌，代表賣壓偏重。"});
   if(result.volumeAnalysis?.trend==="warning") alerts.push({label:"⚠️ 價漲量縮",level:"hot",message:"股價上漲但量能不足，追價需要更保守。"});
@@ -167,12 +183,12 @@ function buildAnalysisReport(data: AnalyzeResult) {
   }
 
   lines.push(`技術指標：`);
-  lines.push(`RSI 14：${data.technical.rsi14.toFixed(2)}`);
-  lines.push(`MA5：${data.technical.ma5.toFixed(2)}`);
-  lines.push(`MA20：${data.technical.ma20.toFixed(2)}`);
-  lines.push(`MA60：${data.technical.ma60.toFixed(2)}`);
-  lines.push(`MACD：${data.technical.macd.toFixed(2)}`);
-  lines.push(`KD：${data.technical.kd.toFixed(2)}`);
+  lines.push(`RSI 14：${formatTech(data.technical.rsi14)}`);
+  lines.push(`MA5：${formatTech(data.technical.ma5)}`);
+  lines.push(`MA20：${formatTech(data.technical.ma20)}`);
+  lines.push(`MA60：${formatTech(data.technical.ma60)}`);
+  lines.push(`MACD：${formatTech(data.technical.macd)}`);
+  lines.push(`KD：${formatTech(data.technical.kd)}`);
   lines.push(``);
 
   lines.push(`AI總結：`);
@@ -532,12 +548,12 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
 
       <Block title="技術指標">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          <Metric label="RSI 14" value={data.technical.rsi14.toFixed(2)} />
-          <Metric label="MA5" value={data.technical.ma5.toFixed(2)} />
-          <Metric label="MA20" value={data.technical.ma20.toFixed(2)} />
-          <Metric label="MA60" value={data.technical.ma60.toFixed(2)} />
-          <Metric label="MACD" value={data.technical.macd.toFixed(2)} trend={data.technical.macd>=0?"bull":"bear"} />
-          <Metric label="KD" value={data.technical.kd.toFixed(2)} />
+          <Metric label="RSI 14" value={formatTech(data.technical.rsi14)} />
+          <Metric label="MA5" value={formatTech(data.technical.ma5)} />
+          <Metric label="MA20" value={formatTech(data.technical.ma20)} />
+          <Metric label="MA60" value={formatTech(data.technical.ma60)} />
+          <Metric label="MACD" value={formatTech(data.technical.macd)} trend={isNumberValue(data.technical.macd)&&Number(data.technical.macd)>=0?"bull":"bear"} />
+          <Metric label="KD" value={formatTech(data.technical.kd)} />
         </div>
       </Block>
 
@@ -591,7 +607,7 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
                 <div className={item.ai.trend==="bull"?"font-black text-emerald-400":item.ai.trend==="bear"?"font-black text-red-400":"font-black text-amber-400"}>{item.ai.verdict}｜{item.ai.score} 分</div>
               </div>
               <div className="mt-2 text-sm text-slate-400">
-                漲跌幅：{item.quote.changePercent}%｜RSI：{item.technical.rsi14.toFixed(2)}｜KD：{item.technical.kd.toFixed(2)}
+                漲跌幅：{item.quote.changePercent}%｜RSI：{formatTech(item.technical.rsi14)}｜KD：{formatTech(item.technical.kd)}
                 {item.patternAnalysis?`｜型態：${item.patternAnalysis.signal}`:""}
                 {item.tradePlan?`｜計畫：${item.tradePlan.stance}`:""}
                 {item.chaseRisk?`｜追高風險：${item.chaseRisk.score}`:""}
