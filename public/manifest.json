@@ -1,0 +1,19 @@
+{
+  "name": "LUNA AI 台股分析",
+  "short_name": "LUNA AI",
+  "description": "台股 AI 技術分析儀表板",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#070b14",
+  "theme_color": "#06b6d4",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
