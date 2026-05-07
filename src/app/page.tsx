@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
 type ChartKBar = {
   date: string;
@@ -194,6 +195,59 @@ export default function Home() {
     setScanResults(scanResults.filter((x) => x.symbol !== item));
   }
 
+  function getWatchlistName(stockSymbol: string) {
+    if (data?.symbol === stockSymbol) {
+      return data.quote.name;
+    }
+
+    const scanned = scanResults.find((item) => item.symbol === stockSymbol);
+    if (scanned) {
+      return scanned.quote.name;
+    }
+
+    const record = history.find((item) => item.symbol === stockSymbol);
+    if (record) {
+      return record.name;
+    }
+
+    const stockNames: Record<string, string> = {
+      "2330": "台積電",
+      "2317": "鴻海",
+      "0050": "元大台灣50",
+      "2454": "聯發科",
+      "2603": "長榮",
+      "2303": "聯電",
+      "2881": "富邦金",
+      "2882": "國泰金",
+      "2412": "中華電",
+      "2308": "台達電",
+      "2382": "廣達",
+      "3711": "日月光投控",
+      "2891": "中信金",
+      "2884": "玉山金",
+      "2885": "元大金",
+      "2886": "兆豐金",
+      "2892": "第一金",
+      "5871": "中租-KY",
+      "6505": "台塑化",
+      "1301": "台塑",
+      "1303": "南亞",
+      "2002": "中鋼",
+      "1216": "統一",
+      "3008": "大立光",
+      "3231": "緯創",
+      "2356": "英業達",
+      "2357": "華碩",
+      "2379": "瑞昱",
+      "2408": "南亞科",
+      "3034": "聯詠",
+      "4938": "和碩",
+      "6669": "緯穎",
+    };
+
+    return stockNames[stockSymbol] || stockSymbol;
+  }
+
   async function fetchAnalyze(targetSymbol: string) {
     const response = await fetch("/api/analyze", {
       method: "POST",
@@ -325,7 +379,7 @@ export default function Home() {
                     onClick={() => analyze(item)}
                     className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-bold text-slate-300 hover:border-cyan-400 hover:text-cyan-400"
                   >
-                    {item}
+                    {getWatchlistName(item)} {item}
                   </button>
                 ))}
               </div>
@@ -339,20 +393,20 @@ export default function Home() {
                   {watchlist.map((item) => (
                     <div
                       key={item}
-                      className="flex items-center justify-between rounded-2xl border border-slate-700 bg-slate-950 p-3"
+                      className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 p-3"
                     >
                       <button
                         type="button"
                         onClick={() => analyze(item)}
-                        className="text-lg font-black hover:text-cyan-400"
+                        className="text-left text-lg font-black hover:text-cyan-400"
                       >
-                        {item}
+                        {getWatchlistName(item)} {item}
                       </button>
 
                       <button
                         type="button"
                         onClick={() => removeWatchlist(item)}
-                        className="text-sm text-red-400 hover:text-red-300"
+                        className="shrink-0 text-sm text-red-400 hover:text-red-300"
                       >
                         刪除
                       </button>
@@ -513,7 +567,7 @@ export default function Home() {
                               排名 #{index + 1}
                             </div>
                             <div className="text-2xl font-black">
-                              {item.symbol}｜{item.quote.name}
+                              {item.quote.name} {item.symbol}
                             </div>
                           </div>
 
@@ -566,7 +620,7 @@ export default function Home() {
                         <div className="flex items-center justify-between gap-3">
                           <div>
                             <div className="font-black">
-                              {item.symbol}｜{item.name}
+                              {item.name} {item.symbol}
                             </div>
                             <div className="mt-1 text-xs text-slate-500">
                               {item.time}
@@ -754,7 +808,7 @@ function Panel({
   children,
 }: {
   title: string;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <div className="rounded-3xl border border-slate-700 bg-slate-900 p-5 shadow-xl">
@@ -766,7 +820,7 @@ function Panel({
   );
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({ children }: { children: ReactNode }) {
   return (
     <div className="mb-4 font-black tracking-widest text-cyan-400">
       {children}
