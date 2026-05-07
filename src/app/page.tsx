@@ -46,6 +46,11 @@ type AnalyzeResult = {
   };
 };
 
+type WatchItem = {
+  symbol: string;
+  name: string;
+};
+
 type HistoryItem = {
   symbol: string;
   name: string;
@@ -55,6 +60,51 @@ type HistoryItem = {
   price: number;
   changePercent: number;
   time: string;
+};
+
+const STOCK_NAMES: Record<string, string> = {
+  "00981A": "主動統一台股增長",
+  "009816": "凱基台灣TOP50",
+  "0050": "元大台灣50",
+  "00893": "國泰智能電動車",
+
+  "2330": "台積電",
+  "2317": "鴻海",
+  "2454": "聯發科",
+  "2603": "長榮",
+  "2303": "聯電",
+  "2301": "光寶科",
+  "4938": "和碩",
+  "6182": "合晶",
+  "6443": "元晶",
+  "6176": "瑞儀",
+  "2485": "兆赫",
+
+  "2881": "富邦金",
+  "2882": "國泰金",
+  "2884": "玉山金",
+  "2885": "元大金",
+  "2886": "兆豐金",
+  "2891": "中信金",
+  "2892": "第一金",
+
+  "2412": "中華電",
+  "2308": "台達電",
+  "2382": "廣達",
+  "3711": "日月光投控",
+  "6505": "台塑化",
+  "1301": "台塑",
+  "1303": "南亞",
+  "2002": "中鋼",
+  "1216": "統一",
+  "3008": "大立光",
+  "3231": "緯創",
+  "2356": "英業達",
+  "2357": "華碩",
+  "2379": "瑞昱",
+  "2408": "南亞科",
+  "3034": "聯詠",
+  "6669": "緯穎",
 };
 
 function getAlert(result: AnalyzeResult) {
@@ -128,7 +178,7 @@ function getTrendStyle(trend?: "bull" | "bear" | "neutral") {
 export default function Home() {
   const [symbol, setSymbol] = useState("");
   const [data, setData] = useState<AnalyzeResult | null>(null);
-  const [watchlist, setWatchlist] = useState<string[]>([]);
+  const [watchlist, setWatchlist] = useState<WatchItem[]>([]);
   const [scanResults, setScanResults] = useState<AnalyzeResult[]>([]);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -139,11 +189,35 @@ export default function Home() {
     const savedWatchlist = localStorage.getItem("luna-watchlist");
     const savedHistory = localStorage.getItem("luna-history");
 
-    if (savedWatchlist) setWatchlist(JSON.parse(savedWatchlist));
-    if (savedHistory) setHistory(JSON.parse(savedHistory));
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
+    }
+
+    if (savedWatchlist) {
+      const parsed = JSON.parse(savedWatchlist);
+
+      if (Array.isArray(parsed)) {
+        const upgraded: WatchItem[] = parsed.map((item) => {
+          if (typeof item === "string") {
+            return {
+              symbol: item,
+              name: STOCK_NAMES[item] || item,
+            };
+          }
+
+          return {
+            symbol: item.symbol,
+            name: item.name || STOCK_NAMES[item.symbol] || item.symbol,
+          };
+        });
+
+        setWatchlist(upgraded);
+        localStorage.setItem("luna-watchlist", JSON.stringify(upgraded));
+      }
+    }
   }, []);
 
-  function saveWatchlist(next: string[]) {
+  function saveWatchlist(next: WatchItem[]) {
     setWatchlist(next);
     localStorage.setItem("luna-watchlist", JSON.stringify(next));
   }
@@ -173,79 +247,23 @@ export default function Home() {
     saveHistory([item, ...filtered].slice(0, 20));
   }
 
-  function addWatchlist() {
-    const clean = cleanSymbol(symbol);
+  function updateWatchlistName(result: AnalyzeResult) {
+    const exists = watchlist.find((item) => item.symbol === result.symbol);
 
-    if (!clean) {
-      setError("請先輸入股票代號");
-      return;
-    }
+    if (!exists) return;
 
-    if (watchlist.includes(clean)) {
-      setError(`${clean} 已經在自選股`);
-      return;
-    }
+    const next = watchlist.map((item) => {
+      if (item.symbol === result.symbol) {
+        return {
+          symbol: item.symbol,
+          name: result.quote.name || item.name || item.symbol,
+        };
+      }
 
-    saveWatchlist([...watchlist, clean]);
-    setError("");
-  }
+      return item;
+    });
 
-  function removeWatchlist(item: string) {
-    saveWatchlist(watchlist.filter((x) => x !== item));
-    setScanResults(scanResults.filter((x) => x.symbol !== item));
-  }
-
-  function getWatchlistName(stockSymbol: string) {
-    if (data?.symbol === stockSymbol) {
-      return data.quote.name;
-    }
-
-    const scanned = scanResults.find((item) => item.symbol === stockSymbol);
-    if (scanned) {
-      return scanned.quote.name;
-    }
-
-    const record = history.find((item) => item.symbol === stockSymbol);
-    if (record) {
-      return record.name;
-    }
-
-    const stockNames: Record<string, string> = {
-      "2330": "台積電",
-      "2317": "鴻海",
-      "0050": "元大台灣50",
-      "2454": "聯發科",
-      "2603": "長榮",
-      "2303": "聯電",
-      "2881": "富邦金",
-      "2882": "國泰金",
-      "2412": "中華電",
-      "2308": "台達電",
-      "2382": "廣達",
-      "3711": "日月光投控",
-      "2891": "中信金",
-      "2884": "玉山金",
-      "2885": "元大金",
-      "2886": "兆豐金",
-      "2892": "第一金",
-      "5871": "中租-KY",
-      "6505": "台塑化",
-      "1301": "台塑",
-      "1303": "南亞",
-      "2002": "中鋼",
-      "1216": "統一",
-      "3008": "大立光",
-      "3231": "緯創",
-      "2356": "英業達",
-      "2357": "華碩",
-      "2379": "瑞昱",
-      "2408": "南亞科",
-      "3034": "聯詠",
-      "4938": "和碩",
-      "6669": "緯穎",
-    };
-
-    return stockNames[stockSymbol] || stockSymbol;
+    saveWatchlist(next);
   }
 
   async function fetchAnalyze(targetSymbol: string) {
@@ -266,6 +284,56 @@ export default function Home() {
     return result as AnalyzeResult;
   }
 
+  async function addWatchlist() {
+    const clean = cleanSymbol(symbol);
+
+    if (!clean) {
+      setError("請先輸入股票代號");
+      return;
+    }
+
+    if (watchlist.some((item) => item.symbol === clean)) {
+      setError(`${clean} 已經在自選股`);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const result = await fetchAnalyze(clean);
+
+      const next = [
+        ...watchlist,
+        {
+          symbol: result.symbol,
+          name: result.quote.name || STOCK_NAMES[result.symbol] || result.symbol,
+        },
+      ];
+
+      saveWatchlist(next);
+      setData(result);
+      addHistory(result);
+    } catch {
+      const next = [
+        ...watchlist,
+        {
+          symbol: clean,
+          name: STOCK_NAMES[clean] || clean,
+        },
+      ];
+
+      saveWatchlist(next);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function removeWatchlist(item: WatchItem) {
+    saveWatchlist(watchlist.filter((x) => x.symbol !== item.symbol));
+    setScanResults(scanResults.filter((x) => x.symbol !== item.symbol));
+  }
+
   async function analyze(targetSymbol?: string) {
     const finalSymbol = cleanSymbol(targetSymbol || symbol);
 
@@ -283,6 +351,7 @@ export default function Home() {
       const result = await fetchAnalyze(finalSymbol);
       setData(result);
       addHistory(result);
+      updateWatchlistName(result);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -304,7 +373,7 @@ export default function Home() {
 
     for (const item of watchlist) {
       try {
-        const result = await fetchAnalyze(item);
+        const result = await fetchAnalyze(item.symbol);
         results.push(result);
         setScanResults([...results]);
       } catch {
@@ -314,6 +383,21 @@ export default function Home() {
 
     results.sort((a, b) => b.ai.score - a.ai.score);
     setScanResults(results);
+
+    const updatedWatchlist = watchlist.map((item) => {
+      const found = results.find((result) => result.symbol === item.symbol);
+
+      if (found) {
+        return {
+          symbol: item.symbol,
+          name: found.quote.name || item.name,
+        };
+      }
+
+      return item;
+    });
+
+    saveWatchlist(updatedWatchlist);
     setScanning(false);
   }
 
@@ -366,7 +450,8 @@ export default function Home() {
               <button
                 type="button"
                 onClick={addWatchlist}
-                className="mt-3 w-full rounded-2xl border border-slate-600 bg-slate-800 py-4 font-bold text-slate-200 hover:bg-slate-700"
+                disabled={loading}
+                className="mt-3 w-full rounded-2xl border border-slate-600 bg-slate-800 py-4 font-bold text-slate-200 hover:bg-slate-700 disabled:bg-slate-700"
               >
                 加入自選股
               </button>
@@ -379,7 +464,7 @@ export default function Home() {
                     onClick={() => analyze(item)}
                     className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-bold text-slate-300 hover:border-cyan-400 hover:text-cyan-400"
                   >
-                    {getWatchlistName(item)} {item}
+                    {STOCK_NAMES[item] || item} {item}
                   </button>
                 ))}
               </div>
@@ -392,15 +477,15 @@ export default function Home() {
                 <div className="space-y-3">
                   {watchlist.map((item) => (
                     <div
-                      key={item}
+                      key={item.symbol}
                       className="flex items-center justify-between gap-3 rounded-2xl border border-slate-700 bg-slate-950 p-3"
                     >
                       <button
                         type="button"
-                        onClick={() => analyze(item)}
+                        onClick={() => analyze(item.symbol)}
                         className="text-left text-lg font-black hover:text-cyan-400"
                       >
-                        {getWatchlistName(item)} {item}
+                        {item.name} {item.symbol}
                       </button>
 
                       <button
