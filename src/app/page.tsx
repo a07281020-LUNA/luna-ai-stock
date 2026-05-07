@@ -12,6 +12,71 @@ type ChartKBar = {
   volume: number;
 };
 
+type VolumeAnalysis = {
+  latestVolume: number;
+  previousVolume: number;
+  avgVolume5: number | null;
+  avgVolume20: number | null;
+  volumeRatio5: number | null;
+  volumeRatio20: number | null;
+  priceChangePercent: number;
+  signal: string;
+  trend: "bull" | "bear" | "neutral" | "warning";
+  reasons: string[];
+};
+
+type SupportResistance = {
+  latestClose: number;
+  high20: number;
+  low20: number;
+  high60: number;
+  low60: number;
+  distanceTo20HighPercent: number;
+  distanceTo20LowPercent: number;
+  distanceTo60HighPercent: number;
+  distanceTo60LowPercent: number;
+  signal: string;
+  trend: "bull" | "bear" | "neutral" | "warning";
+  reasons: string[];
+};
+
+type ChaseRisk = {
+  score: number;
+  level: string;
+  suggestion: string;
+  reasons: string[];
+};
+
+type TradePlan = {
+  stance: string;
+  action: string;
+  observationZone: {
+    low: number;
+    high: number;
+  };
+  pullbackZone: {
+    low: number;
+    high: number;
+  };
+  breakoutPrice: number;
+  stopLossPrice: number;
+  takeProfitReference: number;
+  reasons: string[];
+};
+
+type PatternAnalysis = {
+  signal: string;
+  trend: "bull" | "bear" | "neutral" | "warning";
+  patterns: string[];
+  reasons: string[];
+  stats: {
+    bodyRatio: number;
+    changePercent: number;
+    last5UpCount: number;
+    last5DownCount: number;
+  };
+};
+
 type AnalyzeResult = {
   success: boolean;
   symbol: string;
@@ -36,6 +101,11 @@ type AnalyzeResult = {
     macd: number;
     kd: number;
   };
+  volumeAnalysis?: VolumeAnalysis;
+  supportResistance?: SupportResistance;
+  chaseRisk?: ChaseRisk;
+  tradePlan?: TradePlan;
+  patternAnalysis?: PatternAnalysis;
   chartData?: ChartKBar[];
   ai: {
     score: number;
@@ -107,6 +177,45 @@ const STOCK_NAMES: Record<string, string> = {
   "6669": "緯穎",
 };
 
+function formatNumber(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") return "-";
+
+  return Number(value).toLocaleString("zh-TW", {
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatPrice(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") return "-";
+
+  return Number(value).toLocaleString("zh-TW", {
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") return "-";
+  return `${Number(value).toFixed(2)}%`;
+}
+
+function formatVolumeLots(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") return "-";
+
+  const lots = Number(value) / 1000;
+  const tenThousandLots = lots / 10000;
+
+  if (tenThousandLots >= 1) {
+    return `${tenThousandLots.toFixed(2)} 萬張`;
+  }
+
+  return `${Math.round(lots).toLocaleString("zh-TW")} 張`;
+}
+
+function formatRatio(value: number | null | undefined) {
+  if (value === null || typeof value === "undefined") return "-";
+  return `${Number(value).toFixed(2)}x`;
+}
+
 function getAlert(result: AnalyzeResult) {
   const alerts: {
     label: string;
@@ -128,6 +237,52 @@ function getAlert(result: AnalyzeResult) {
     });
   }
 
+  if (result.patternAnalysis?.trend === "bull") {
+    alerts.push({
+      label: "📊 型態偏多",
+      level: "bull",
+      message: "K線型態偏多，短線結構較強。",
+    });
+  }
+
+  if (result.patternAnalysis?.trend === "bear") {
+    alerts.push({
+      label: "📉 型態偏空",
+      level: "bear",
+      message: "K線型態偏空，短線賣壓較重。",
+    });
+  }
+
+  if (result.patternAnalysis?.trend === "warning") {
+    alerts.push({
+      label: "⚠️ 型態警示",
+      level: "hot",
+      message: "K線型態出現假突破或震盪警示，追價需保守。",
+    });
+  }
+
+  if (result.tradePlan?.stance.includes("偏多")) {
+    alerts.push({
+      label: "📌 有交易計畫",
+      level: "watch",
+      message: "系統已產生觀察區、突破價與停損參考，可依計畫控管風險。",
+    });
+  }
+
+  if (result.chaseRisk && result.chaseRisk.score >= 75) {
+    alerts.push({
+      label: "🚨 追高高風險",
+      level: "hot",
+      message: "追高風險分數偏高，建議等拉回或站穩突破後再評估。",
+    });
+  } else if (result.chaseRisk && result.chaseRisk.score >= 55) {
+    alerts.push({
+      label: "⚠️ 追高需謹慎",
+      level: "hot",
+      message: "追高風險中高，不建議一次重倉追價。",
+    });
+  }
+
   if (result.technical.rsi14 >= 75) {
     alerts.push({
       label: "⚠️ RSI 過熱",
@@ -141,6 +296,54 @@ function getAlert(result: AnalyzeResult) {
       label: "⚠️ KD 高檔",
       level: "hot",
       message: "KD 高於 80，短線容易震盪或拉回。",
+    });
+  }
+
+  if (result.volumeAnalysis?.trend === "bull") {
+    alerts.push({
+      label: "📈 放量上攻",
+      level: "bull",
+      message: "量能與價格同步轉強，短線多方訊號較完整。",
+    });
+  }
+
+  if (result.volumeAnalysis?.trend === "bear") {
+    alerts.push({
+      label: "📉 放量下跌",
+      level: "bear",
+      message: "量能放大但股價下跌，代表賣壓偏重。",
+    });
+  }
+
+  if (result.volumeAnalysis?.trend === "warning") {
+    alerts.push({
+      label: "⚠️ 價漲量縮",
+      level: "hot",
+      message: "股價上漲但量能不足，追價需要更保守。",
+    });
+  }
+
+  if (result.supportResistance?.trend === "bull") {
+    alerts.push({
+      label: "🚀 突破壓力",
+      level: "bull",
+      message: "股價突破近期壓力區，短線多方訊號增強。",
+    });
+  }
+
+  if (result.supportResistance?.trend === "bear") {
+    alerts.push({
+      label: "⚠️ 跌破支撐",
+      level: "bear",
+      message: "股價跌破近期支撐區，短線風險升高。",
+    });
+  }
+
+  if (result.supportResistance?.trend === "warning") {
+    alerts.push({
+      label: "⛔ 接近壓力",
+      level: "hot",
+      message: "目前接近壓力區，追價空間有限。",
     });
   }
 
@@ -163,7 +366,7 @@ function getAlert(result: AnalyzeResult) {
   return alerts;
 }
 
-function getTrendStyle(trend?: "bull" | "bear" | "neutral") {
+function getTrendStyle(trend?: "bull" | "bear" | "neutral" | "warning") {
   if (trend === "bull") {
     return "text-emerald-400 border-emerald-400/60 bg-emerald-400/10";
   }
@@ -172,7 +375,18 @@ function getTrendStyle(trend?: "bull" | "bear" | "neutral") {
     return "text-red-400 border-red-400/60 bg-red-400/10";
   }
 
+  if (trend === "warning") {
+    return "text-orange-400 border-orange-400/60 bg-orange-400/10";
+  }
+
   return "text-amber-400 border-amber-400/60 bg-amber-400/10";
+}
+
+function getRiskTrend(score: number): "bull" | "bear" | "neutral" | "warning" {
+  if (score >= 75) return "bear";
+  if (score >= 55) return "warning";
+  if (score <= 35) return "bull";
+  return "neutral";
 }
 
 export default function Home() {
@@ -414,7 +628,7 @@ export default function Home() {
                 台股 AI 技術分析儀表板
               </h1>
               <p className="mt-3 text-slate-400">
-                即時報價 × K線圖 × K棒技術指標 × 自選股掃描 × 條件提醒
+                即時報價 × K線圖 × 型態辨識 × 交易計畫 × 追高風險
               </p>
             </div>
 
@@ -551,7 +765,7 @@ export default function Home() {
                     <Metric label="最高價" value={data.quote.high} />
                     <Metric label="最低價" value={data.quote.low} />
                     <Metric label="昨收價" value={data.quote.previousClose} />
-                    <Metric label="成交量" value={data.quote.volume} />
+                    <Metric label="成交量" value={formatVolumeLots(data.quote.volume)} />
                     <Metric
                       label="AI分數"
                       value={data.ai.score}
@@ -564,6 +778,312 @@ export default function Home() {
                   <SectionTitle>K線圖</SectionTitle>
                   <CandlestickChart data={data.chartData || []} />
                 </div>
+
+                {data.patternAnalysis && (
+                  <div className="rounded-3xl border border-slate-700 bg-slate-900 p-6">
+                    <SectionTitle>K線型態分析</SectionTitle>
+
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div
+                        className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(
+                          data.patternAnalysis.trend
+                        )}`}
+                      >
+                        {data.patternAnalysis.signal}
+                      </div>
+
+                      <div className="text-sm text-slate-400">
+                        近5日紅K：{data.patternAnalysis.stats.last5UpCount}｜黑K：
+                        {data.patternAnalysis.stats.last5DownCount}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {data.patternAnalysis.patterns.map((item, index) => (
+                        <span
+                          key={index}
+                          className={`rounded-full border px-3 py-1 text-sm font-bold ${getTrendStyle(
+                            data.patternAnalysis?.trend
+                          )}`}
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-3">
+                      <Metric
+                        label="K棒實體比例"
+                        value={`${(data.patternAnalysis.stats.bodyRatio * 100).toFixed(2)}%`}
+                      />
+                      <Metric
+                        label="日漲跌幅"
+                        value={formatPercent(data.patternAnalysis.stats.changePercent)}
+                        trend={
+                          data.patternAnalysis.stats.changePercent >= 0 ? "bull" : "bear"
+                        }
+                      />
+                      <Metric
+                        label="近5日紅K數"
+                        value={data.patternAnalysis.stats.last5UpCount}
+                        trend={
+                          data.patternAnalysis.stats.last5UpCount >= 4
+                            ? "bull"
+                            : "neutral"
+                        }
+                      />
+                    </div>
+
+                    <div className="mt-5 space-y-3 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">
+                      {data.patternAnalysis.reasons.map((reason, index) => (
+                        <div key={index}>• {reason}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {data.tradePlan && (
+                  <div className="rounded-3xl border border-slate-700 bg-slate-900 p-6">
+                    <SectionTitle>交易計畫 / 進場區間</SectionTitle>
+
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div
+                        className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(
+                          data.ai.trend
+                        )}`}
+                      >
+                        {data.tradePlan.stance}
+                      </div>
+
+                      <div className="text-sm text-slate-400">
+                        依 K棒、壓力支撐、追高風險自動產生
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-cyan-400/30 bg-slate-950 p-5">
+                      <div className="mb-2 font-black text-cyan-400">
+                        操作節奏
+                      </div>
+                      <div className="leading-7 text-slate-200">
+                        {data.tradePlan.action}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <Metric
+                        label="觀察區下緣"
+                        value={formatPrice(data.tradePlan.observationZone.low)}
+                      />
+                      <Metric
+                        label="觀察區上緣"
+                        value={formatPrice(data.tradePlan.observationZone.high)}
+                      />
+                      <Metric
+                        label="拉回觀察下緣"
+                        value={formatPrice(data.tradePlan.pullbackZone.low)}
+                      />
+                      <Metric
+                        label="拉回觀察上緣"
+                        value={formatPrice(data.tradePlan.pullbackZone.high)}
+                      />
+                      <Metric
+                        label="突破確認價"
+                        value={formatPrice(data.tradePlan.breakoutPrice)}
+                        trend="bull"
+                      />
+                      <Metric
+                        label="停損參考價"
+                        value={formatPrice(data.tradePlan.stopLossPrice)}
+                        trend="bear"
+                      />
+                      <Metric
+                        label="停利參考壓力"
+                        value={formatPrice(data.tradePlan.takeProfitReference)}
+                        trend="warning"
+                      />
+                    </div>
+
+                    <div className="mt-5 space-y-3 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">
+                      {data.tradePlan.reasons.map((reason, index) => (
+                        <div key={index}>• {reason}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {data.chaseRisk && (
+                  <div className="rounded-3xl border border-slate-700 bg-slate-900 p-6">
+                    <SectionTitle>追高風險分數</SectionTitle>
+
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div
+                        className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(
+                          getRiskTrend(data.chaseRisk.score)
+                        )}`}
+                      >
+                        追高風險：{data.chaseRisk.score} 分｜{data.chaseRisk.level}
+                      </div>
+
+                      <div className="text-sm text-slate-400">
+                        分數越高，代表越不適合追高。
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-amber-400/40 bg-slate-950 p-5">
+                      <div className="mb-2 font-black text-amber-400">
+                        AI 建議
+                      </div>
+                      <div className="leading-7 text-slate-200">
+                        {data.chaseRisk.suggestion}
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-3 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">
+                      {data.chaseRisk.reasons.map((reason, index) => (
+                        <div key={index}>• {reason}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {data.supportResistance && (
+                  <div className="rounded-3xl border border-slate-700 bg-slate-900 p-6">
+                    <SectionTitle>支撐壓力位</SectionTitle>
+
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div
+                        className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(
+                          data.supportResistance.trend
+                        )}`}
+                      >
+                        {data.supportResistance.signal}
+                      </div>
+
+                      <div className="text-sm text-slate-400">
+                        最新收盤：{formatNumber(data.supportResistance.latestClose)}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <Metric
+                        label="20日壓力"
+                        value={formatNumber(data.supportResistance.high20)}
+                      />
+                      <Metric
+                        label="20日支撐"
+                        value={formatNumber(data.supportResistance.low20)}
+                      />
+                      <Metric
+                        label="60日壓力"
+                        value={formatNumber(data.supportResistance.high60)}
+                      />
+                      <Metric
+                        label="60日支撐"
+                        value={formatNumber(data.supportResistance.low60)}
+                      />
+                      <Metric
+                        label="距20日壓力"
+                        value={formatPercent(data.supportResistance.distanceTo20HighPercent)}
+                        trend={
+                          data.supportResistance.distanceTo20HighPercent <= 2 &&
+                          data.supportResistance.distanceTo20HighPercent >= 0
+                            ? "warning"
+                            : "neutral"
+                        }
+                      />
+                      <Metric
+                        label="距20日支撐"
+                        value={formatPercent(data.supportResistance.distanceTo20LowPercent)}
+                        trend={
+                          data.supportResistance.distanceTo20LowPercent <= 3 &&
+                          data.supportResistance.distanceTo20LowPercent >= 0
+                            ? "warning"
+                            : "neutral"
+                        }
+                      />
+                      <Metric
+                        label="距60日壓力"
+                        value={formatPercent(data.supportResistance.distanceTo60HighPercent)}
+                      />
+                      <Metric
+                        label="距60日支撐"
+                        value={formatPercent(data.supportResistance.distanceTo60LowPercent)}
+                      />
+                    </div>
+
+                    <div className="mt-5 space-y-3 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">
+                      {data.supportResistance.reasons.map((reason, index) => (
+                        <div key={index}>• {reason}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {data.volumeAnalysis && (
+                  <div className="rounded-3xl border border-slate-700 bg-slate-900 p-6">
+                    <SectionTitle>成交量分析</SectionTitle>
+
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                      <div
+                        className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(
+                          data.volumeAnalysis.trend
+                        )}`}
+                      >
+                        {data.volumeAnalysis.signal}
+                      </div>
+
+                      <div className="text-sm text-slate-400">
+                        價格變動：
+                        {data.volumeAnalysis.priceChangePercent.toFixed(2)}%
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                      <Metric
+                        label="今日量"
+                        value={formatVolumeLots(data.volumeAnalysis.latestVolume)}
+                      />
+                      <Metric
+                        label="前一日量"
+                        value={formatVolumeLots(data.volumeAnalysis.previousVolume)}
+                      />
+                      <Metric
+                        label="5日均量"
+                        value={formatVolumeLots(data.volumeAnalysis.avgVolume5)}
+                      />
+                      <Metric
+                        label="20日均量"
+                        value={formatVolumeLots(data.volumeAnalysis.avgVolume20)}
+                      />
+                      <Metric
+                        label="5日量比"
+                        value={formatRatio(data.volumeAnalysis.volumeRatio5)}
+                        trend={
+                          data.volumeAnalysis.volumeRatio5 &&
+                          data.volumeAnalysis.volumeRatio5 >= 1.3
+                            ? "bull"
+                            : "neutral"
+                        }
+                      />
+                      <Metric
+                        label="20日量比"
+                        value={formatRatio(data.volumeAnalysis.volumeRatio20)}
+                        trend={
+                          data.volumeAnalysis.volumeRatio20 &&
+                          data.volumeAnalysis.volumeRatio20 >= 1.5
+                            ? "bull"
+                            : "neutral"
+                        }
+                      />
+                    </div>
+
+                    <div className="mt-5 space-y-3 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">
+                      {data.volumeAnalysis.reasons.map((reason, index) => (
+                        <div key={index}>• {reason}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="rounded-3xl border border-slate-700 bg-slate-900 p-6">
                   <SectionTitle>條件提醒</SectionTitle>
@@ -673,6 +1193,21 @@ export default function Home() {
                           漲跌幅：{item.quote.changePercent}%｜RSI：
                           {item.technical.rsi14.toFixed(2)}｜KD：
                           {item.technical.kd.toFixed(2)}
+                          {item.patternAnalysis
+                            ? `｜型態：${item.patternAnalysis.signal}`
+                            : ""}
+                          {item.tradePlan
+                            ? `｜計畫：${item.tradePlan.stance}`
+                            : ""}
+                          {item.chaseRisk
+                            ? `｜追高風險：${item.chaseRisk.score}`
+                            : ""}
+                          {item.supportResistance
+                            ? `｜壓力支撐：${item.supportResistance.signal}`
+                            : ""}
+                          {item.volumeAnalysis
+                            ? `｜量能：${item.volumeAnalysis.signal}`
+                            : ""}
                         </div>
 
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -744,7 +1279,11 @@ export default function Home() {
                 <StatusRow label="Fugle 即時報價" value="已啟用" />
                 <StatusRow label="FinMind K棒" value="已啟用" />
                 <StatusRow label="K線圖" value="已啟用" />
-                <StatusRow label="LINE通知" value="尚未啟用" />
+                <StatusRow label="K線型態辨識" value="已啟用" />
+                <StatusRow label="成交量分析" value="已啟用" />
+                <StatusRow label="支撐壓力分析" value="已啟用" />
+                <StatusRow label="追高風險分數" value="已啟用" />
+                <StatusRow label="交易計畫" value="已啟用" />
                 <StatusRow label="資料儲存" value="本機瀏覽器" />
               </div>
             </Panel>
@@ -920,13 +1459,15 @@ function Metric({
 }: {
   label: string;
   value: string | number;
-  trend?: "bull" | "bear" | "neutral";
+  trend?: "bull" | "bear" | "neutral" | "warning";
 }) {
   const color =
     trend === "bull"
       ? "text-emerald-400"
       : trend === "bear"
       ? "text-red-400"
+      : trend === "warning"
+      ? "text-orange-400"
       : trend === "neutral"
       ? "text-amber-400"
       : "text-white";
