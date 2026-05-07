@@ -9,10 +9,46 @@ type KBar = {
   Trading_Volume?: number;
 };
 
+const STOCK_NAMES: Record<string, string> = {
+  "00981A": "主動統一台股增長",
+  "009816": "凱基台灣TOP50",
+  "0050": "元大台灣50",
+  "00893": "國泰智能電動車",
+  "2330": "台積電",
+  "2317": "鴻海",
+  "2454": "聯發科",
+  "2603": "長榮",
+  "2303": "聯電",
+  "2301": "光寶科",
+  "4938": "和碩",
+  "6182": "合晶",
+  "6443": "元晶",
+  "6176": "瑞儀",
+  "2485": "兆赫",
+};
+
 function getStartDate(daysAgo: number) {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
   return date.toISOString().slice(0, 10);
+}
+
+async function fetchWithTimeout(url: string, options: RequestInit, timeoutMs: number) {
+  const controller = new AbortController();
+
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      cache: "no-store",
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 function sma(values: number[], period: number) {
@@ -190,30 +226,39 @@ export async function POST(request: Request) {
     const finmindToken = process.env.FINMIND_TOKEN;
 
     if (!fugleKey) {
-      return NextResponse.json({ success: false, error: "FUGLE_API_KEY 沒讀到" });
+      return NextResponse.json({
+        success: false,
+        error: "FUGLE_API_KEY 沒讀到，請檢查 Vercel 環境變數。",
+      });
     }
 
     if (!finmindToken) {
-      return NextResponse.json({ success: false, error: "FINMIND_TOKEN 沒讀到" });
-    }
-
-    const fugleUrl = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${symbol}`;
-
-    const fugleResponse = await fetch(fugleUrl, {
-      headers: {
-        "X-API-KEY": fugleKey,
-      },
-      cache: "no-store",
-    });
-
-    const fugleData = await fugleResponse.json();
-
-    if (!fugleResponse.ok) {
       return NextResponse.json({
         success: false,
-        error: "Fugle API 連線失敗",
-        detail: fugleData,
+        error: "FINMIND_TOKEN 沒讀到，請檢查 Vercel 環境變數。",
       });
+    }
+
+    let fugleData: any = null;
+
+    try {
+      const fugleUrl = `https://api.fugle.tw/marketdata/v1.0/stock/intraday/quote/${symbol}`;
+
+      const fugleResponse = await fetchWithTimeout(
+        fugleUrl,
+        {
+          headers: {
+            "X-API-KEY": fugleKey,
+          },
+        },
+        7000
+      );
+
+      if (fugleResponse.ok) {
+        fugleData = await fugleResponse.json();
+      }
+    } catch {
+      fugleData = null;
     }
 
     const finmindUrl =
@@ -222,22 +267,19 @@ export async function POST(request: Request) {
       `&start_date=${getStartDate(180)}` +
       `&token=${finmindToken}`;
 
-    const finmindResponse = await fetch(finmindUrl, {
-      cache: "no-store",
-    });
-
+    const finmindResponse = await fetchWithTimeout(finmindUrl, {}, 12000);
     const finmindData = await finmindResponse.json();
 
     if (!finmindData.data || finmindData.data.length === 0) {
       return NextResponse.json({
         success: false,
-        error: "FinMind K棒資料抓不到",
-        detail: finmindData,
+        error: "FinMind K棒資料抓不到，可能是代號錯誤或資料源暫時異常。",
       });
     }
 
     const kbars = finmindData.data as KBar[];
     const closes = kbars.map((item) => Number(item.close));
+    const latest = kbars[kbars.length - 1];
 
     const ma5 = sma(closes, 5);
     const ma20 = sma(closes, 20);
@@ -264,23 +306,30 @@ export async function POST(request: Request) {
       volume: Number(item.Trading_Volume || 0),
     }));
 
+    const fallbackName = STOCK_NAMES[symbol] || symbol;
+    const fallbackPrice = Number(latest.close);
+
     return NextResponse.json({
       success: true,
       symbol,
       quote: {
-        name: fugleData.name,
-        price: fugleData.closePrice ?? fugleData.lastPrice ?? fugleData.referencePrice,
-        change: fugleData.change,
-        changePercent: fugleData.changePercent,
-        open: fugleData.openPrice,
-        high: fugleData.highPrice,
-        low: fugleData.lowPrice,
-        previousClose: fugleData.previousClose,
-        volume: fugleData.total?.tradeVolume,
+        name: fugleData?.name || fallbackName,
+        price:
+          fugleData?.closePrice ??
+          fugleData?.lastPrice ??
+          fugleData?.referencePrice ??
+          fallbackPrice,
+        change: fugleData?.change ?? 0,
+        changePercent: fugleData?.changePercent ?? 0,
+        open: fugleData?.openPrice ?? Number(latest.open),
+        high: fugleData?.highPrice ?? Number(latest.max),
+        low: fugleData?.lowPrice ?? Number(latest.min),
+        previousClose: fugleData?.previousClose ?? fallbackPrice,
+        volume: fugleData?.total?.tradeVolume ?? Number(latest.Trading_Volume || 0),
       },
       technical: {
-        latestDate: kbars[kbars.length - 1].date,
-        latestClose: closes[closes.length - 1],
+        latestDate: latest.date,
+        latestClose: fallbackPrice,
         ma5,
         ma20,
         ma60,
@@ -290,11 +339,16 @@ export async function POST(request: Request) {
       },
       chartData,
       ai,
+      sourceStatus: {
+        fugle: fugleData ? "ok" : "fallback",
+        finmind: "ok",
+      },
     });
   } catch (error) {
     return NextResponse.json({
       success: false,
-      error: String(error),
+      error:
+        "資料源回應較慢或暫時異常，請稍後再試。詳細：" + String(error),
     });
   }
 }
