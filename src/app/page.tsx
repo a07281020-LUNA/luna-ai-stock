@@ -275,6 +275,50 @@ function getModuleStatusStyle(status?:string){
   return "text-slate-200";
 }
 
+function isEtfLikeSymbol(symbol?:string,name?:string){
+  const clean=String(symbol||"").replace(".TW","").trim().toUpperCase();
+  const displayName=String(name||"");
+
+  if(/^00/.test(clean)) return true;
+  if(/ETF|ETN|指數|主動|高股息|台灣50|TOP50|電動車|債|期貨|基金/.test(displayName)) return true;
+
+  return false;
+}
+
+function getFundamentalStatusText(result?:AnalyzeResult|null){
+  if(!result) return "待查詢";
+
+  const status=result.sourceStatus?.fundamental;
+  const isEtf=isEtfLikeSymbol(result.symbol,result.quote?.name);
+
+  if(isEtf&&(status==="no_data"||status==="no_results"||!result.fundamentalAnalysis)){
+    return "ETF 不適用";
+  }
+
+  return getModuleStatusText(status);
+}
+
+function getFundamentalStatusStyle(result?:AnalyzeResult|null){
+  if(!result) return "text-slate-200";
+
+  const status=result.sourceStatus?.fundamental;
+  const isEtf=isEtfLikeSymbol(result.symbol,result.quote?.name);
+
+  if(isEtf&&(status==="no_data"||status==="no_results"||!result.fundamentalAnalysis)){
+    return "text-sky-300";
+  }
+
+  return getModuleStatusStyle(status);
+}
+
+function getFundamentalEmptyMessage(result:AnalyzeResult){
+  if(isEtfLikeSymbol(result.symbol,result.quote?.name)){
+    return "ETF / 指數型商品不適用一般公司財報，例如 EPS、毛利率、營益率、淨利率與月營收。這不是資料錯誤。";
+  }
+
+  return "目前沒有足夠財報資料，可能是資料源尚未更新或該標的財報欄位不完整。";
+}
+
 function getTrendStyle(trend?:Trend){
   if(trend==="bull") return "text-emerald-400 border-emerald-400/60 bg-emerald-400/10";
   if(trend==="bear") return "text-red-400 border-red-400/60 bg-red-400/10";
@@ -729,7 +773,7 @@ export default function Home(){
                 <StatusRow label="支撐壓力分析" value="已啟用" />
                 <StatusRow label="追高風險分數" value="已啟用" />
                 <StatusRow label="交易計畫" value="已啟用" />
-                <StatusRow label="基本面財報" value={getModuleStatusText(data?.sourceStatus?.fundamental)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.fundamental)} />
+                <StatusRow label="基本面財報" value={getFundamentalStatusText(data)} valueClassName={getFundamentalStatusStyle(data)} />
                 <StatusRow label="產業題材" value={getModuleStatusText(data?.sourceStatus?.industry)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.industry)} />
                 <StatusRow label="大盤環境" value={getModuleStatusText(data?.sourceStatus?.market)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.market)} />
                 <StatusRow label="資料儲存" value="本機瀏覽器" />
@@ -789,7 +833,7 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
 
       <MobileAnalysisTabs data={data} scanResults={scanResults} setData={setData} copyReport={copyReport} />
 
-      <div className="hidden space-y-6 md:block">
+      <div className="hidden">
 
       {data.scoreBreakdown && <Block title="AI 綜合總分拆解">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -1216,19 +1260,30 @@ type MobileTabKey = "overview" | "tech" | "chip" | "theme" | "fund" | "strategy"
 
 function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeResult; scanResults:AnalyzeResult[]; setData:(d:AnalyzeResult)=>void; copyReport:(d?:AnalyzeResult)=>void}){
   const [activeTab,setActiveTab]=useState<MobileTabKey>("overview");
-  const tabs:{key:MobileTabKey; label:string}[]=[
-    {key:"overview",label:"總覽"},
-    {key:"tech",label:"技術"},
-    {key:"chip",label:"籌碼"},
-    {key:"theme",label:"題材"},
-    {key:"fund",label:"財報"},
-    {key:"strategy",label:"策略"},
+  const tabs:{key:MobileTabKey; label:string; icon:string; hint:string}[]=[
+    {key:"overview",label:"總覽",icon:"📌",hint:"分數 / 警報"},
+    {key:"tech",label:"技術",icon:"📈",hint:"K線 / 指標"},
+    {key:"chip",label:"籌碼",icon:"🏦",hint:"法人 / 融資"},
+    {key:"theme",label:"題材",icon:"🔥",hint:"題材 / 討論"},
+    {key:"fund",label:"財報",icon:"📘",hint:"營收 / EPS"},
+    {key:"strategy",label:"策略",icon:"🎯",hint:"進出 / 風險"},
   ];
 
-  return <div className="md:hidden">
-    <div className="sticky top-0 z-40 -mx-5 mb-4 border-y border-slate-700 bg-[#070b14]/95 px-5 py-3 backdrop-blur">
-      <div className="flex gap-2 overflow-x-auto pb-1">
-        {tabs.map((tab)=><button key={tab.key} type="button" onClick={()=>setActiveTab(tab.key)} className={activeTab===tab.key?"shrink-0 rounded-full bg-cyan-500 px-4 py-2 text-sm font-black text-white":"shrink-0 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-300"}>{tab.label}</button>)}
+  return <div className="space-y-5">
+    <div className="sticky top-0 z-40 -mx-5 mb-5 border-y border-cyan-400/20 bg-[#070b14]/95 px-5 py-3 shadow-xl shadow-cyan-500/10 backdrop-blur md:static md:top-auto md:z-auto md:mx-0 md:rounded-3xl md:border md:border-cyan-400/30 md:bg-slate-950/95 md:p-4">
+      <div className="mb-3 hidden items-center justify-between md:flex">
+        <div>
+          <div className="text-xs font-black tracking-[0.3em] text-cyan-400">ANALYSIS MODULES</div>
+          <div className="mt-1 text-lg font-black text-white">選擇要看的分析區塊</div>
+        </div>
+        <div className="text-sm text-slate-400">不用再一路往下滑</div>
+      </div>
+      <div className="grid grid-cols-3 gap-2 md:grid-cols-6 md:gap-3">
+        {tabs.map((tab)=><button key={tab.key} type="button" onClick={()=>setActiveTab(tab.key)} className={activeTab===tab.key?"rounded-2xl border border-cyan-300 bg-cyan-500 px-3 py-3 text-center font-black text-white shadow-lg shadow-cyan-500/30 ring-2 ring-cyan-300/30 md:px-4 md:py-4":"rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-center font-bold text-slate-300 hover:border-cyan-400/60 hover:bg-slate-800 hover:text-cyan-200 md:px-4 md:py-4"}>
+          <div className="text-xl md:text-2xl">{tab.icon}</div>
+          <div className="mt-1 text-sm md:text-base">{tab.label}</div>
+          <div className={activeTab===tab.key?"mt-1 hidden text-xs text-cyan-50/90 md:block":"mt-1 hidden text-xs text-slate-500 md:block"}>{tab.hint}</div>
+        </button>)}
       </div>
     </div>
 
@@ -1371,7 +1426,7 @@ function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeR
           </div>
           <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">{data.fundamentalAnalysis.summary}</div>
           <ReasonList reasons={data.fundamentalAnalysis.reasons?.slice(0,5)||[]} />
-        </Block> : <EmptyMobileBlock title="基本面財報" />}
+        </Block> : <EmptyMobileBlock title="基本面財報" message={getFundamentalEmptyMessage(data)} />}
       </>}
 
       {activeTab==="strategy" && <>
@@ -1404,8 +1459,8 @@ function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeR
   </div>
 }
 
-function EmptyMobileBlock({title}:{title:string}){
-  return <Block title={title}><div className="rounded-2xl border border-slate-700 bg-slate-950 p-6 text-center text-slate-500">目前沒有足夠資料</div></Block>
+function EmptyMobileBlock({title,message}:{title:string;message?:string}){
+  return <Block title={title}><div className="rounded-2xl border border-slate-700 bg-slate-950 p-6 text-center leading-7 text-slate-400">{message || "目前沒有足夠資料"}</div></Block>
 }
 
 function StrategyCard({title,item}:{title:string;item:{verdict:string;score:number;action:string;reasons:string[]}}){
