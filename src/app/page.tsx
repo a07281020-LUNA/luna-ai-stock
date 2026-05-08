@@ -638,15 +638,14 @@ export default function Home(){
     const clean=cleanSymbol(symbol);
     if(!clean){ setError("請先輸入股票代號"); return; }
     if(watchlist.some((item)=>item.symbol===clean)){ setError(`${clean} 已經在自選股`); return; }
-    setLoading(true); setError("");
-    try{
-      const result=await fetchAnalyze(clean);
-      saveWatchlist([...watchlist,{symbol:result.symbol,name:result.quote.name||STOCK_NAMES[result.symbol]||result.symbol}]);
-      setData(result);
-      addHistory(result);
-    }catch{
-      saveWatchlist([...watchlist,{symbol:clean,name:STOCK_NAMES[clean]||clean}]);
-    }finally{ setLoading(false); }
+
+    setError("");
+    setSymbol(clean);
+
+    saveWatchlist([
+      ...watchlist,
+      { symbol: clean, name: STOCK_NAMES[clean] || clean },
+    ]);
   }
 
   function removeWatchlist(item:WatchItem){
