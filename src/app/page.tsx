@@ -658,6 +658,14 @@ export default function Home(){
     }
     results.sort((a,b)=>b.ai.score-a.ai.score);
     setScanResults(results);
+
+    if(results.length>0){
+      setData(results[0]);
+      addHistory(results[0]);
+    }else{
+      setError("自選股掃描完成，但目前沒有成功取得任何股票資料，請稍後再試或檢查 API 狀態。");
+    }
+
     const updated=watchlist.map((item)=>{ const found=results.find((r)=>r.symbol===item.symbol); return found?{symbol:item.symbol,name:found.quote.name||item.name}:item; });
     saveWatchlist(updated);
     setScanning(false);
@@ -830,6 +838,8 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
           {data.marketEnvironment && <Metric label="大盤環境" value={data.marketEnvironment.verdict} trend={data.marketEnvironment.trend} />}
         </div>
       </div>
+
+      {scanResults.length>0 && <ScanResultsQuickBlock scanResults={scanResults} setData={setData} />}
 
       <MobileAnalysisTabs data={data} scanResults={scanResults} setData={setData} copyReport={copyReport} />
 
@@ -1255,6 +1265,56 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
   );
 }
 
+
+
+function ScanResultsQuickBlock({scanResults,setData}:{scanResults:AnalyzeResult[]; setData:(d:AnalyzeResult)=>void}){
+  if(scanResults.length===0) return null;
+  const strongest=scanResults[0];
+  const highRisk=[...scanResults].sort((a,b)=>(b.chaseRisk?.score || 0)-(a.chaseRisk?.score || 0))[0];
+  const weakest=[...scanResults].sort((a,b)=>a.ai.score-b.ai.score)[0];
+
+  return <Block title="自選股掃描結果">
+    <div className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+      {strongest && <button type="button" onClick={()=>setData(strongest)} className="rounded-2xl border border-emerald-400/40 bg-emerald-400/10 p-4 text-left hover:bg-emerald-400/15">
+        <div className="text-xs font-bold tracking-widest text-emerald-300">最強勢</div>
+        <div className="mt-2 text-xl font-black">{strongest.quote.name} {strongest.symbol}</div>
+        <div className="mt-1 text-emerald-300">{strongest.ai.verdict}｜{strongest.ai.score} 分</div>
+      </button>}
+      {highRisk && <button type="button" onClick={()=>setData(highRisk)} className="rounded-2xl border border-orange-400/40 bg-orange-400/10 p-4 text-left hover:bg-orange-400/15">
+        <div className="text-xs font-bold tracking-widest text-orange-300">追高風險最高</div>
+        <div className="mt-2 text-xl font-black">{highRisk.quote.name} {highRisk.symbol}</div>
+        <div className="mt-1 text-orange-300">追高風險｜{highRisk.chaseRisk?.score ?? "-"} 分</div>
+      </button>}
+      {weakest && <button type="button" onClick={()=>setData(weakest)} className="rounded-2xl border border-red-400/40 bg-red-400/10 p-4 text-left hover:bg-red-400/15">
+        <div className="text-xs font-bold tracking-widest text-red-300">最弱勢</div>
+        <div className="mt-2 text-xl font-black">{weakest.quote.name} {weakest.symbol}</div>
+        <div className="mt-1 text-red-300">{weakest.ai.verdict}｜{weakest.ai.score} 分</div>
+      </button>}
+    </div>
+
+    <div className="space-y-3">
+      {scanResults.map((item,index)=>{
+        const alerts=getAlert(item);
+        return <button key={item.symbol} type="button" onClick={()=>setData(item)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 text-left hover:bg-slate-800">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm text-slate-500">排名 #{index+1}</div>
+              <div className="text-2xl font-black">{item.quote.name} {item.symbol}</div>
+            </div>
+            <div className={item.ai.trend==="bull"?"font-black text-emerald-400":item.ai.trend==="bear"?"font-black text-red-400":"font-black text-amber-400"}>{item.ai.verdict}｜{item.ai.score} 分</div>
+          </div>
+          <div className="mt-2 text-sm text-slate-400">
+            漲跌幅：{item.quote.changePercent}%｜RSI：{formatTech(item.technical.rsi14)}｜KD：{formatTech(item.technical.kd)}
+            {item.scoreBreakdown?`｜綜合：${item.scoreBreakdown.verdict} ${item.scoreBreakdown.finalScore}分`:""}
+            {item.chipAnalysis?`｜籌碼：${item.chipAnalysis.verdict} ${item.chipAnalysis.score}分`:""}
+            {item.discussionSentiment?`｜討論：${item.discussionSentiment.overall}`:""}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">{alerts.slice(0,5).map((alert,i)=><AlertPill key={i} alert={alert} />)}</div>
+        </button>
+      })}
+    </div>
+  </Block>
+}
 
 type MobileTabKey = "overview" | "tech" | "chip" | "theme" | "fund" | "strategy";
 
