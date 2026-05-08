@@ -185,6 +185,110 @@ const STOCK_NAMES: Record<string, string> = {
   "2485": "兆赫",
 };
 
+type TavilyCacheEntry<T> = {
+  expiresAt: number;
+  value: T;
+};
+
+const TAVILY_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
+function getTavilyCacheStore() {
+  const globalStore = globalThis as typeof globalThis & {
+    __lunaTavilyCache?: Map<string, TavilyCacheEntry<any>>;
+  };
+
+  if (!globalStore.__lunaTavilyCache) {
+    globalStore.__lunaTavilyCache = new Map<string, TavilyCacheEntry<any>>();
+  }
+
+  return globalStore.__lunaTavilyCache;
+}
+
+function getCachedTavilyResult<T>(key: string): T | null {
+  const cache = getTavilyCacheStore();
+  const cached = cache.get(key) as TavilyCacheEntry<T> | undefined;
+
+  if (!cached) return null;
+
+  if (cached.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+
+  return cached.value;
+}
+
+function setCachedTavilyResult<T>(key: string, value: T) {
+  getTavilyCacheStore().set(key, {
+    expiresAt: Date.now() + TAVILY_CACHE_TTL_MS,
+    value,
+  });
+}
+
+function getTavilyCacheKey(kind: "discussion" | "industry", symbol: string, stockName: string) {
+  return `${kind}:${symbol}:${stockName}`.toLowerCase();
+}
+
+type FinMindCacheEntry = {
+  expiresAt: number;
+  value: any;
+};
+
+const FINMIND_CACHE_TTL = {
+  price: 5 * 60 * 1000,
+  chip: 30 * 60 * 1000,
+  fundamental: 12 * 60 * 60 * 1000,
+  market: 30 * 60 * 1000,
+};
+
+function getFinMindCacheStore() {
+  const globalStore = globalThis as typeof globalThis & {
+    __lunaFinMindCache?: Map<string, FinMindCacheEntry>;
+  };
+
+  if (!globalStore.__lunaFinMindCache) {
+    globalStore.__lunaFinMindCache = new Map<string, FinMindCacheEntry>();
+  }
+
+  return globalStore.__lunaFinMindCache;
+}
+
+function getCachedFinMindJson(key: string) {
+  const cache = getFinMindCacheStore();
+  const cached = cache.get(key);
+
+  if (!cached) return null;
+
+  if (cached.expiresAt <= Date.now()) {
+    cache.delete(key);
+    return null;
+  }
+
+  return cached.value;
+}
+
+function setCachedFinMindJson(key: string, value: any, ttlMs: number) {
+  getFinMindCacheStore().set(key, {
+    expiresAt: Date.now() + ttlMs,
+    value,
+  });
+}
+
+async function fetchFinMindJsonCached(url: string, timeoutMs: number, ttlMs: number) {
+  const cacheKey = `finmind:${url}`;
+  const cached = getCachedFinMindJson(cacheKey);
+  if (cached) return cached;
+
+  const response = await fetchWithTimeout(url, {}, timeoutMs);
+  const json = await response.json();
+
+  if (response.ok) {
+    setCachedFinMindJson(cacheKey, json, ttlMs);
+  }
+
+  return json;
+}
+
 function getStartDate(daysAgo: number) {
   const date = new Date();
   date.setDate(date.getDate() - daysAgo);
@@ -477,9 +581,19 @@ function buildDiscussionSentimentFromSources(
   };
 }
 
-async function fetchDiscussionSentiment(symbol: string, stockName: string): Promise<DiscussionSentiment> {
+async function fetchDiscussionSentiment(
+  symbol: string,
+  stockName: string,
+  options: { forceRefresh?: boolean } = {}
+): Promise<DiscussionSentiment> {
   const tavilyKey = process.env.TAVILY_API_KEY;
   const query = `${symbol} ${stockName} 台股 PTT 股板 Dcard Mobile01 Yahoo股市 討論區 投資人 看法 風向`;
+  const cacheKey = getTavilyCacheKey("discussion", symbol, stockName);
+
+  if (!options.forceRefresh) {
+    const cached = getCachedTavilyResult<DiscussionSentiment>(cacheKey);
+    if (cached) return { ...cached, status: cached.status === "ok" ? "ok" : cached.status };
+  }
 
   if (!tavilyKey) {
     return buildDiscussionSentimentFromSources(symbol, stockName, query, [], "missing_key");
@@ -527,7 +641,9 @@ async function fetchDiscussionSentiment(symbol: string, stockName: string): Prom
       return buildDiscussionSentimentFromSources(symbol, stockName, query, [], "no_results");
     }
 
-    return buildDiscussionSentimentFromSources(symbol, stockName, query, sources, "ok");
+    const result = buildDiscussionSentimentFromSources(symbol, stockName, query, sources, "ok");
+    setCachedTavilyResult(cacheKey, result);
+    return result;
   } catch {
     return buildDiscussionSentimentFromSources(symbol, stockName, query, [], "error");
   }
@@ -822,9 +938,13 @@ function buildChipAnalysis(params: { institutionalRows: any[]; marginRows: any[]
   };
 }
 
-async function fetchChipAnalysis(symbol: string, finmindToken: string): Promise<ChipAnalysis> {
+async function fetchChipAnalysis(
+  symbol: string,
+  finmindToken: string,
+  options: { lite?: boolean } = {}
+): Promise<ChipAnalysis> {
   try {
-    const startDate = getStartDate(90);
+    const startDate = getStartDate(options.lite ? 60 : 90);
     const institutionalUrl =
       `https://api.finmindtrade.com/api/v4/data?` +
       `dataset=TaiwanStockInstitutionalInvestorsBuySell&data_id=${symbol}` +
@@ -837,22 +957,20 @@ async function fetchChipAnalysis(symbol: string, finmindToken: string): Promise<
       `&start_date=${startDate}` +
       `&token=${finmindToken}`;
 
-    const [institutionalResponse, marginResponse] = await Promise.allSettled([
-      fetchWithTimeout(institutionalUrl, {}, 12000),
-      fetchWithTimeout(marginUrl, {}, 12000),
+    const [institutionalResult, marginResult] = await Promise.allSettled([
+      fetchFinMindJsonCached(institutionalUrl, 12000, FINMIND_CACHE_TTL.chip),
+      fetchFinMindJsonCached(marginUrl, 12000, FINMIND_CACHE_TTL.chip),
     ]);
 
     let institutionalRows: any[] = [];
     let marginRows: any[] = [];
 
-    if (institutionalResponse.status === "fulfilled" && institutionalResponse.value.ok) {
-      const json = await institutionalResponse.value.json();
-      if (Array.isArray(json.data)) institutionalRows = json.data;
+    if (institutionalResult.status === "fulfilled" && Array.isArray(institutionalResult.value?.data)) {
+      institutionalRows = institutionalResult.value.data;
     }
 
-    if (marginResponse.status === "fulfilled" && marginResponse.value.ok) {
-      const json = await marginResponse.value.json();
-      if (Array.isArray(json.data)) marginRows = json.data;
+    if (marginResult.status === "fulfilled" && Array.isArray(marginResult.value?.data)) {
+      marginRows = marginResult.value.data;
     }
 
     return buildChipAnalysis({ institutionalRows, marginRows });
@@ -1002,7 +1120,11 @@ function buildFundamentalAnalysis(params: { revenueRows: any[]; financialRows: a
   };
 }
 
-async function fetchFundamentalAnalysis(symbol: string, finmindToken: string): Promise<FundamentalAnalysis> {
+async function fetchFundamentalAnalysis(
+  symbol: string,
+  finmindToken: string,
+  options: { lite?: boolean } = {}
+): Promise<FundamentalAnalysis> {
   try {
     const revenueUrl =
       `https://api.finmindtrade.com/api/v4/data?` +
@@ -1016,22 +1138,31 @@ async function fetchFundamentalAnalysis(symbol: string, finmindToken: string): P
       `&start_date=${getStartDate(900)}` +
       `&token=${finmindToken}`;
 
-    const [revenueResponse, financialResponse] = await Promise.allSettled([
-      fetchWithTimeout(revenueUrl, {}, 12000),
-      fetchWithTimeout(financialUrl, {}, 12000),
-    ]);
-
     let revenueRows: any[] = [];
     let financialRows: any[] = [];
 
-    if (revenueResponse.status === "fulfilled" && revenueResponse.value.ok) {
-      const json = await revenueResponse.value.json();
-      if (Array.isArray(json.data)) revenueRows = json.data;
-    }
+    if (options.lite) {
+      const revenueResult = await Promise.allSettled([
+        fetchFinMindJsonCached(revenueUrl, 12000, FINMIND_CACHE_TTL.fundamental),
+      ]);
 
-    if (financialResponse.status === "fulfilled" && financialResponse.value.ok) {
-      const json = await financialResponse.value.json();
-      if (Array.isArray(json.data)) financialRows = json.data;
+      const revenueJson = revenueResult[0];
+      if (revenueJson.status === "fulfilled" && Array.isArray(revenueJson.value?.data)) {
+        revenueRows = revenueJson.value.data;
+      }
+    } else {
+      const [revenueResult, financialResult] = await Promise.allSettled([
+        fetchFinMindJsonCached(revenueUrl, 12000, FINMIND_CACHE_TTL.fundamental),
+        fetchFinMindJsonCached(financialUrl, 12000, FINMIND_CACHE_TTL.fundamental),
+      ]);
+
+      if (revenueResult.status === "fulfilled" && Array.isArray(revenueResult.value?.data)) {
+        revenueRows = revenueResult.value.data;
+      }
+
+      if (financialResult.status === "fulfilled" && Array.isArray(financialResult.value?.data)) {
+        financialRows = financialResult.value.data;
+      }
     }
 
     return buildFundamentalAnalysis({ revenueRows, financialRows });
@@ -1113,9 +1244,20 @@ function buildIndustryThemeAnalysis(symbol: string, stockName: string, sources: 
   };
 }
 
-async function fetchIndustryThemeAnalysis(symbol: string, stockName: string): Promise<IndustryThemeAnalysis> {
+async function fetchIndustryThemeAnalysis(
+  symbol: string,
+  stockName: string,
+  options: { forceRefresh?: boolean } = {}
+): Promise<IndustryThemeAnalysis> {
   const tavilyKey = process.env.TAVILY_API_KEY;
   const query = `${stockName} ${symbol} 產業 題材 受惠 成長 風險 法說 展望 台股`;
+  const cacheKey = getTavilyCacheKey("industry", symbol, stockName);
+
+  if (!options.forceRefresh) {
+    const cached = getCachedTavilyResult<IndustryThemeAnalysis>(cacheKey);
+    if (cached) return cached;
+  }
+
   if (!tavilyKey) return buildIndustryThemeAnalysis(symbol, stockName, [], "missing_key");
   try {
     const response = await fetchWithTimeout(
@@ -1137,7 +1279,9 @@ async function fetchIndustryThemeAnalysis(symbol: string, stockName: string): Pr
       url: String(item.url || ""),
       content: String(item.content || ""),
     })).filter((item: DiscussionSource) => item.url);
-    return buildIndustryThemeAnalysis(symbol, stockName, sources, sources.length ? "ok" : "no_results");
+    const result = buildIndustryThemeAnalysis(symbol, stockName, sources, sources.length ? "ok" : "no_results");
+    if (sources.length) setCachedTavilyResult(cacheKey, result);
+    return result;
   } catch {
     return buildIndustryThemeAnalysis(symbol, stockName, [], "error");
   }
@@ -1237,9 +1381,7 @@ async function fetchMarketEnvironmentAnalysis(finmindToken: string): Promise<Mar
         `&start_date=${getStartDate(180)}` +
         `&token=${finmindToken}`;
       try {
-        const response = await fetchWithTimeout(url, {}, 10000);
-        if (!response.ok) continue;
-        const json = await response.json();
+        const json = await fetchFinMindJsonCached(url, 10000, FINMIND_CACHE_TTL.market);
         if (Array.isArray(json.data) && json.data.length >= 20) {
           return buildMarketEnvironmentAnalysis(json.data as KBar[]);
         }
@@ -2080,6 +2222,10 @@ export async function POST(request: Request) {
     const body = await request.json();
     const symbol = String(body.symbol || "2330").replace(".TW", "").trim();
     const stockName = String(body.name || body.stockName || STOCK_NAMES[symbol] || symbol).trim();
+    const isScanMode = Boolean(body.scanMode || body.mode === "scan");
+    const skipTavily = Boolean(body.skipTavily || isScanMode);
+    const liteFinMind = Boolean(body.liteFinMind || isScanMode);
+    const forceRefreshTavily = Boolean(body.forceRefreshTavily);
 
     const fugleKey = process.env.FUGLE_API_KEY;
     const finmindToken = process.env.FINMIND_TOKEN;
@@ -2123,11 +2269,10 @@ export async function POST(request: Request) {
     const finmindUrl =
       `https://api.finmindtrade.com/api/v4/data?` +
       `dataset=TaiwanStockPrice&data_id=${symbol}` +
-      `&start_date=${getStartDate(180)}` +
+      `&start_date=${getStartDate(liteFinMind ? 120 : 180)}` +
       `&token=${finmindToken}`;
 
-    const finmindResponse = await fetchWithTimeout(finmindUrl, {}, 12000);
-    const finmindData = await finmindResponse.json();
+    const finmindData = await fetchFinMindJsonCached(finmindUrl, 12000, FINMIND_CACHE_TTL.price);
 
     if (!finmindData.data || finmindData.data.length === 0) {
       return NextResponse.json({
@@ -2196,21 +2341,31 @@ export async function POST(request: Request) {
 
     const fallbackName = fugleData?.name || stockName || STOCK_NAMES[symbol] || symbol;
     const fallbackPrice = Number(latest.close);
+    const discussionQuery = `${symbol} ${fallbackName} 台股 PTT 股板 Dcard Mobile01 Yahoo股市 討論區 投資人 看法 風向`;
+
+    const discussionPromise = skipTavily
+      ? Promise.resolve(buildDiscussionSentimentFromSources(symbol, fallbackName, discussionQuery, [], "fallback"))
+      : fetchDiscussionSentiment(symbol, fallbackName, { forceRefresh: forceRefreshTavily });
+
+    const industryPromise = skipTavily
+      ? Promise.resolve(buildIndustryThemeAnalysis(symbol, fallbackName, [], "no_results"))
+      : fetchIndustryThemeAnalysis(symbol, fallbackName, { forceRefresh: forceRefreshTavily });
+
     const [discussionSentiment, chipAnalysis, fundamentalAnalysis, industryThemeAnalysis, marketEnvironment] = await Promise.all([
-      fetchDiscussionSentiment(symbol, fallbackName),
-      fetchChipAnalysis(symbol, finmindToken),
-      fetchFundamentalAnalysis(symbol, finmindToken),
-      fetchIndustryThemeAnalysis(symbol, fallbackName),
+      discussionPromise,
+      fetchChipAnalysis(symbol, finmindToken, { lite: liteFinMind }),
+      fetchFundamentalAnalysis(symbol, finmindToken, { lite: liteFinMind }),
+      industryPromise,
       fetchMarketEnvironmentAnalysis(finmindToken),
     ]);
 
     const sourceStatus = {
       fugle: fugleData ? "ok" : "fallback",
       finmind: "ok",
-      tavily: discussionSentiment.status,
+      tavily: skipTavily ? "skipped" : discussionSentiment.status,
       chip: chipAnalysis.status,
       fundamental: fundamentalAnalysis.status,
-      industry: industryThemeAnalysis.status,
+      industry: skipTavily ? "skipped" : industryThemeAnalysis.status,
       market: marketEnvironment.status,
     };
 
@@ -2293,6 +2448,7 @@ export async function POST(request: Request) {
       strategyProfile,
       dataQuality,
       sourceStatus,
+      requestMode: liteFinMind ? "scan" : "full",
     });
   } catch (error) {
     return NextResponse.json({

@@ -263,6 +263,7 @@ function getModuleStatusText(status?:string){
   if(status==="ok") return "已啟用";
   if(status==="partial") return "部分資料";
   if(status==="missing_key") return "未設定 Key";
+  if(status==="skipped") return "掃描略過";
   if(status==="no_results"||status==="no_data") return "暫無資料";
   if(status==="error") return "暫時異常";
   return "待查詢";
@@ -270,7 +271,7 @@ function getModuleStatusText(status?:string){
 
 function getModuleStatusStyle(status?:string){
   if(status==="ok") return "text-emerald-300";
-  if(status==="partial"||status==="no_results"||status==="no_data") return "text-amber-300";
+  if(status==="partial"||status==="no_results"||status==="no_data"||status==="skipped") return "text-amber-300";
   if(status==="missing_key"||status==="error") return "text-orange-300";
   return "text-slate-200";
 }
@@ -344,7 +345,9 @@ function getDiscussionTrend(overall?:string):Trend{
 function getDiscussionStatusText(status?:string){
   if(status==="ok") return "已啟用";
   if(status==="missing_key") return "未設定 Key";
+  if(status==="skipped") return "掃描略過";
   if(status==="no_results") return "暫無資料";
+  if(status==="fallback") return "掃描略過";
   if(status==="error") return "暫時異常";
   return "待查詢";
 }
@@ -352,7 +355,7 @@ function getDiscussionStatusText(status?:string){
 function getDiscussionStatusStyle(status?:string){
   if(status==="ok") return "text-emerald-300";
   if(status==="missing_key"||status==="error") return "text-orange-300";
-  if(status==="no_results") return "text-amber-300";
+  if(status==="no_results"||status==="fallback") return "text-amber-300";
   return "text-slate-200";
 }
 
@@ -611,8 +614,21 @@ export default function Home(){
     saveWatchlist(next);
   }
 
-  async function fetchAnalyze(targetSymbol:string){
-    const response=await fetch("/api/analyze",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({symbol:targetSymbol})});
+  async function fetchAnalyze(
+    targetSymbol:string,
+    options?:{skipTavily?:boolean; liteFinMind?:boolean; mode?:"single"|"scan"; forceRefreshTavily?:boolean}
+  ){
+    const response=await fetch("/api/analyze",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        symbol:targetSymbol,
+        skipTavily:options?.skipTavily || false,
+        liteFinMind:options?.liteFinMind || options?.mode === "scan",
+        mode:options?.mode || "single",
+        forceRefreshTavily:options?.forceRefreshTavily || false,
+      })
+    });
     const result=await response.json();
     if(!result.success) throw new Error(result.error||`${targetSymbol} 分析失敗`);
     return result as AnalyzeResult;
@@ -654,7 +670,11 @@ export default function Home(){
     setScanning(true); setError(""); setScanResults([]);
     const results:AnalyzeResult[]=[];
     for(const item of watchlist){
-      try{ const result=await fetchAnalyze(item.symbol); results.push(result); setScanResults([...results]); }catch{}
+      try{
+        const result=await fetchAnalyze(item.symbol,{skipTavily:true,liteFinMind:true,mode:"scan"});
+        results.push(result);
+        setScanResults([...results]);
+      }catch{}
     }
     results.sort((a,b)=>b.ai.score-a.ai.score);
     setScanResults(results);
