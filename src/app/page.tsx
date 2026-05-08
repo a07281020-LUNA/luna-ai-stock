@@ -787,6 +787,10 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
         </div>
       </div>
 
+      <MobileAnalysisTabs data={data} scanResults={scanResults} setData={setData} copyReport={copyReport} />
+
+      <div className="hidden space-y-6 md:block">
+
       {data.scoreBreakdown && <Block title="AI 綜合總分拆解">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.scoreBreakdown.trend)}`}>
@@ -1202,8 +1206,206 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
           })}
         </div>
       </Block>}
+      </div>
     </>
   );
+}
+
+
+type MobileTabKey = "overview" | "tech" | "chip" | "theme" | "fund" | "strategy";
+
+function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeResult; scanResults:AnalyzeResult[]; setData:(d:AnalyzeResult)=>void; copyReport:(d?:AnalyzeResult)=>void}){
+  const [activeTab,setActiveTab]=useState<MobileTabKey>("overview");
+  const tabs:{key:MobileTabKey; label:string}[]=[
+    {key:"overview",label:"總覽"},
+    {key:"tech",label:"技術"},
+    {key:"chip",label:"籌碼"},
+    {key:"theme",label:"題材"},
+    {key:"fund",label:"財報"},
+    {key:"strategy",label:"策略"},
+  ];
+
+  return <div className="md:hidden">
+    <div className="sticky top-0 z-40 -mx-5 mb-4 border-y border-slate-700 bg-[#070b14]/95 px-5 py-3 backdrop-blur">
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {tabs.map((tab)=><button key={tab.key} type="button" onClick={()=>setActiveTab(tab.key)} className={activeTab===tab.key?"shrink-0 rounded-full bg-cyan-500 px-4 py-2 text-sm font-black text-white":"shrink-0 rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-sm font-bold text-slate-300"}>{tab.label}</button>)}
+      </div>
+    </div>
+
+    <div className="space-y-4">
+      {activeTab==="overview" && <>
+        {data.scoreBreakdown && <Block title="總覽 / 綜合分數">
+          <div className={`rounded-2xl border px-5 py-4 text-xl font-black ${getTrendStyle(data.scoreBreakdown.trend)}`}>
+            {data.scoreBreakdown.verdict}｜{data.scoreBreakdown.finalScore} 分
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Metric label="技術面" value={`${data.scoreBreakdown.technical} 分`} trend={data.scoreBreakdown.technical>=65?"bull":data.scoreBreakdown.technical<=40?"bear":"neutral"} />
+            <Metric label="籌碼面" value={`${data.scoreBreakdown.chip} 分`} trend={data.scoreBreakdown.chip>=65?"bull":data.scoreBreakdown.chip<=40?"bear":"neutral"} />
+            <Metric label="基本面" value={`${data.scoreBreakdown.fundamental} 分`} trend={data.scoreBreakdown.fundamental>=65?"bull":data.scoreBreakdown.fundamental<=40?"bear":"neutral"} />
+            <Metric label="題材面" value={`${data.scoreBreakdown.industry} 分`} trend={data.scoreBreakdown.industry>=65?"bull":data.scoreBreakdown.industry<=40?"bear":"neutral"} />
+            <Metric label="討論區" value={`${data.scoreBreakdown.discussion} 分`} trend={data.scoreBreakdown.discussion>=65?"bull":data.scoreBreakdown.discussion<=40?"bear":"neutral"} />
+            <Metric label="大盤" value={`${data.scoreBreakdown.market} 分`} trend={data.scoreBreakdown.market>=65?"bull":data.scoreBreakdown.market<=40?"bear":"neutral"} />
+          </div>
+          <ReasonList reasons={data.scoreBreakdown.reasons?.slice(0,4)||[]} />
+        </Block>}
+
+        <Block title="重要警報">
+          <div className="space-y-3">
+            {getAlert(data).slice(0,5).map((alert,index)=><AlertCard key={index} alert={alert} />)}
+          </div>
+        </Block>
+
+        {data.dataQuality && <Block title="資料完整度">
+          <div className={`rounded-2xl border px-5 py-4 text-xl font-black ${getTrendStyle(data.dataQuality.score>=80?"bull":data.dataQuality.score>=55?"warning":"bear")}`}>
+            {data.dataQuality.score}%｜{data.dataQuality.level}
+          </div>
+          <div className="mt-3 text-sm text-slate-400">{data.dataQuality.okCount} / {data.dataQuality.totalCount} 個資料模組有回傳</div>
+          {data.dataQuality.warnings?.length>0 && <ReasonList reasons={data.dataQuality.warnings.slice(0,4)} />}
+        </Block>}
+
+        {scanResults.length>0 && <Block title="自選股掃描結果">
+          <div className="space-y-3">
+            {scanResults.slice(0,5).map((item,index)=><button key={item.symbol} type="button" onClick={()=>setData(item)} className="w-full rounded-2xl border border-slate-700 bg-slate-950 p-4 text-left">
+              <div className="text-xs text-slate-500">排名 #{index+1}</div>
+              <div className="mt-1 text-xl font-black">{item.quote.name} {item.symbol}</div>
+              <div className={item.ai.trend==="bull"?"mt-1 font-black text-emerald-400":item.ai.trend==="bear"?"mt-1 font-black text-red-400":"mt-1 font-black text-amber-400"}>{item.ai.verdict}｜{item.ai.score} 分</div>
+            </button>)}
+          </div>
+        </Block>}
+      </>}
+
+      {activeTab==="tech" && <>
+        <Block title="K線圖"><CandlestickChart data={data.chartData||[]} /></Block>
+        {data.patternAnalysis && <Block title="K線型態">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.patternAnalysis.trend)}`}>{data.patternAnalysis.signal}</div>
+          <div className="mt-4 flex flex-wrap gap-2">{data.patternAnalysis.patterns.map((item,index)=><span key={index} className={`rounded-full border px-3 py-1 text-sm font-bold ${getTrendStyle(data.patternAnalysis?.trend)}`}>{item}</span>)}</div>
+          <ReasonList reasons={data.patternAnalysis.reasons?.slice(0,4)||[]} />
+        </Block>}
+        {data.volumeAnalysis && <Block title="成交量">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.volumeAnalysis.trend)}`}>{data.volumeAnalysis.signal}</div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Metric label="今日量" value={formatVolumeLots(data.volumeAnalysis.latestVolume)} />
+            <Metric label="20日量比" value={formatRatio(data.volumeAnalysis.volumeRatio20)} trend={data.volumeAnalysis.volumeRatio20&&data.volumeAnalysis.volumeRatio20>=1.5?"bull":"neutral"} />
+            <Metric label="5日量比" value={formatRatio(data.volumeAnalysis.volumeRatio5)} trend={data.volumeAnalysis.volumeRatio5&&data.volumeAnalysis.volumeRatio5>=1.3?"bull":"neutral"} />
+            <Metric label="價格變動" value={formatPercent(data.volumeAnalysis.priceChangePercent)} trend={data.volumeAnalysis.priceChangePercent>=0?"bull":"bear"} />
+          </div>
+          <ReasonList reasons={data.volumeAnalysis.reasons?.slice(0,4)||[]} />
+        </Block>}
+        {data.supportResistance && <Block title="支撐壓力">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.supportResistance.trend)}`}>{data.supportResistance.signal}</div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Metric label="20日壓力" value={formatNumber(data.supportResistance.high20)} />
+            <Metric label="20日支撐" value={formatNumber(data.supportResistance.low20)} />
+            <Metric label="60日壓力" value={formatNumber(data.supportResistance.high60)} />
+            <Metric label="60日支撐" value={formatNumber(data.supportResistance.low60)} />
+          </div>
+          <ReasonList reasons={data.supportResistance.reasons?.slice(0,4)||[]} />
+        </Block>}
+        <Block title="技術指標">
+          <div className="grid grid-cols-2 gap-3">
+            <Metric label="RSI 14" value={formatTech(data.technical.rsi14)} />
+            <Metric label="KD" value={formatTech(data.technical.kd)} />
+            <Metric label="MA5" value={formatTech(data.technical.ma5)} />
+            <Metric label="MA20" value={formatTech(data.technical.ma20)} />
+            <Metric label="MA60" value={formatTech(data.technical.ma60)} />
+            <Metric label="MACD" value={formatTech(data.technical.macd)} trend={isNumberValue(data.technical.macd)&&Number(data.technical.macd)>=0?"bull":"bear"} />
+          </div>
+        </Block>
+      </>}
+
+      {activeTab==="chip" && <>
+        {data.chipAnalysis ? <Block title="籌碼面">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.chipAnalysis.trend)}`}>籌碼：{data.chipAnalysis.verdict}｜{data.chipAnalysis.score} 分</div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Metric label="外資" value={formatSharesToLots(data.chipAnalysis.institutional.foreignNetBuy)} trend={data.chipAnalysis.institutional.foreignNetBuy>=0?"bull":"bear"} />
+            <Metric label="投信" value={formatSharesToLots(data.chipAnalysis.institutional.investmentTrustNetBuy)} trend={data.chipAnalysis.institutional.investmentTrustNetBuy>=0?"bull":"bear"} />
+            <Metric label="三大法人" value={formatSharesToLots(data.chipAnalysis.institutional.totalNetBuy)} trend={data.chipAnalysis.institutional.totalNetBuy>=0?"bull":"bear"} />
+            <Metric label="5日法人" value={formatSharesToLots(data.chipAnalysis.institutional.fiveDayNetBuy)} trend={data.chipAnalysis.institutional.fiveDayNetBuy>=0?"bull":"bear"} />
+            <Metric label="外資連買賣" value={data.chipAnalysis.institutional.foreignStreak?.label || "資料不足"} />
+            <Metric label="投信連買賣" value={data.chipAnalysis.institutional.investmentTrustStreak?.label || "資料不足"} />
+            <Metric label="融資餘額" value={formatSharesToLots(data.chipAnalysis.margin.marginBalance)} />
+            <Metric label="融券餘額" value={formatSharesToLots(data.chipAnalysis.margin.shortBalance)} />
+          </div>
+          <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">{data.chipAnalysis.summary}</div>
+          <ReasonList reasons={[...(data.chipAnalysis.institutional.reasons||[]),...(data.chipAnalysis.margin.reasons||[])].slice(0,6)} />
+        </Block> : <EmptyMobileBlock title="籌碼面" />}
+      </>}
+
+      {activeTab==="theme" && <>
+        {data.industryThemeAnalysis && <Block title="產業題材">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.industryThemeAnalysis.trend)}`}>{data.industryThemeAnalysis.verdict}｜{data.industryThemeAnalysis.score} 分</div>
+          <div className="mt-4 flex flex-wrap gap-2">{data.industryThemeAnalysis.themes?.map((item,index)=><span key={index} className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-sm font-bold text-purple-300">{item}</span>)}</div>
+          <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">{data.industryThemeAnalysis.summary}</div>
+        </Block>}
+        {data.discussionSentiment && <Block title="公開討論區風向">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(getDiscussionTrend(data.discussionSentiment.overall))}`}>{data.discussionSentiment.overall}｜{data.discussionSentiment.score} 分</div>
+          <div className="mt-4 grid grid-cols-3 gap-3">
+            <Metric label="看多" value={`${data.discussionSentiment.bullishPercent}%`} trend="bull" />
+            <Metric label="中立" value={`${data.discussionSentiment.neutralPercent}%`} trend="neutral" />
+            <Metric label="看空" value={`${data.discussionSentiment.bearishPercent}%`} trend="bear" />
+          </div>
+          <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">{data.discussionSentiment.summary || "目前公開討論資料不足。"}</div>
+        </Block>}
+        {data.marketEnvironment && <Block title="大盤環境">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.marketEnvironment.trend)}`}>{data.marketEnvironment.verdict}｜{data.marketEnvironment.score} 分</div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Metric label="大盤收盤" value={formatPrice(data.marketEnvironment.close)} />
+            <Metric label="漲跌幅" value={formatPercent(data.marketEnvironment.changePercent)} trend={data.marketEnvironment.changePercent!==null&&data.marketEnvironment.changePercent>=0?"bull":"bear"} />
+            <Metric label="MA20" value={formatTech(data.marketEnvironment.ma20)} />
+            <Metric label="RSI" value={formatTech(data.marketEnvironment.rsi14)} />
+          </div>
+          <ReasonList reasons={data.marketEnvironment.reasons?.slice(0,4)||[]} />
+        </Block>}
+      </>}
+
+      {activeTab==="fund" && <>
+        {data.fundamentalAnalysis ? <Block title="基本面財報">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.fundamentalAnalysis.trend)}`}>{data.fundamentalAnalysis.verdict}｜{data.fundamentalAnalysis.score} 分</div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Metric label="月營收" value={formatRevenue(data.fundamentalAnalysis.monthlyRevenue)} />
+            <Metric label="營收年增" value={formatPercent(data.fundamentalAnalysis.monthlyRevenueYoY)} trend={data.fundamentalAnalysis.monthlyRevenueYoY!==null&&data.fundamentalAnalysis.monthlyRevenueYoY>=0?"bull":"bear"} />
+            <Metric label="營收月增" value={formatPercent(data.fundamentalAnalysis.monthlyRevenueMoM)} trend={data.fundamentalAnalysis.monthlyRevenueMoM!==null&&data.fundamentalAnalysis.monthlyRevenueMoM>=0?"bull":"bear"} />
+            <Metric label="EPS" value={formatTech(data.fundamentalAnalysis.eps)} trend={data.fundamentalAnalysis.eps!==null&&data.fundamentalAnalysis.eps>=0?"bull":"bear"} />
+            <Metric label="毛利率" value={formatPercent(data.fundamentalAnalysis.grossMargin)} />
+            <Metric label="淨利率" value={formatPercent(data.fundamentalAnalysis.netProfitMargin)} />
+          </div>
+          <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5 leading-7 text-slate-200">{data.fundamentalAnalysis.summary}</div>
+          <ReasonList reasons={data.fundamentalAnalysis.reasons?.slice(0,5)||[]} />
+        </Block> : <EmptyMobileBlock title="基本面財報" />}
+      </>}
+
+      {activeTab==="strategy" && <>
+        {data.strategyProfile && <Block title="短線 / 波段 / 長期">
+          <div className="mb-4 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5 leading-7 text-slate-200">{data.strategyProfile.summary}</div>
+          <div className="space-y-3">
+            <StrategyCard title="短線" item={data.strategyProfile.shortTerm} />
+            <StrategyCard title="波段" item={data.strategyProfile.swing} />
+            <StrategyCard title="長期" item={data.strategyProfile.longTerm} />
+          </div>
+        </Block>}
+        {data.tradePlan && <Block title="交易計畫">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.ai.trend)}`}>{data.tradePlan.stance}</div>
+          <div className="mt-4 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5 leading-7 text-slate-200">{data.tradePlan.action}</div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <Metric label="觀察下緣" value={formatPrice(data.tradePlan.observationZone.low)} />
+            <Metric label="觀察上緣" value={formatPrice(data.tradePlan.observationZone.high)} />
+            <Metric label="突破確認" value={formatPrice(data.tradePlan.breakoutPrice)} trend="bull" />
+            <Metric label="停損參考" value={formatPrice(data.tradePlan.stopLossPrice)} trend="bear" />
+          </div>
+        </Block>}
+        {data.chaseRisk && <Block title="追高風險">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(getRiskTrend(data.chaseRisk.score))}`}>{data.chaseRisk.score} 分｜{data.chaseRisk.level}</div>
+          <div className="mt-4 rounded-2xl border border-amber-400/40 bg-slate-950 p-5 leading-7 text-slate-200">{data.chaseRisk.suggestion}</div>
+          <ReasonList reasons={data.chaseRisk.reasons?.slice(0,5)||[]} />
+        </Block>}
+        <button type="button" onClick={()=>copyReport(data)} className="w-full rounded-2xl bg-cyan-500 py-4 font-black text-white">複製完整分析報告</button>
+      </>}
+    </div>
+  </div>
+}
+
+function EmptyMobileBlock({title}:{title:string}){
+  return <Block title={title}><div className="rounded-2xl border border-slate-700 bg-slate-950 p-6 text-center text-slate-500">目前沒有足夠資料</div></Block>
 }
 
 function StrategyCard({title,item}:{title:string;item:{verdict:string;score:number;action:string;reasons:string[]}}){
