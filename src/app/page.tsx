@@ -739,10 +739,11 @@ export default function Home(){
                 ))}</div>
               )}
               <button type="button" onClick={scanWatchlist} disabled={scanning||watchlist.length===0} className="mt-5 w-full rounded-2xl bg-emerald-500 py-3 font-black text-white hover:bg-emerald-400 disabled:bg-slate-700">{scanning?"掃描中...":"一鍵掃描自選股"}</button>
+              <MobileScanResultsPreview scanResults={scanResults} setData={setData} />
             </Panel>
           </aside>
 
-          <section className="space-y-6">
+          <section id="analysis-main" className="space-y-6">
             {error && <div className="rounded-3xl border border-red-500 bg-red-500/10 p-5 text-red-300">{error}</div>}
             {data ? <AnalysisContent data={data} setData={setData} scanResults={scanResults} copyReport={copyReport} /> : (
               <div className="rounded-3xl border border-slate-700 bg-slate-900 p-10 text-center">
@@ -1266,6 +1267,53 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
 }
 
 
+
+
+function MobileScanResultsPreview({scanResults,setData}:{scanResults:AnalyzeResult[]; setData:(d:AnalyzeResult)=>void}){
+  if(scanResults.length===0) return null;
+
+  function choose(item:AnalyzeResult){
+    setData(item);
+    setTimeout(()=>{
+      document.getElementById("analysis-main")?.scrollIntoView({behavior:"smooth",block:"start"});
+    },50);
+  }
+
+  return <div className="mt-5 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-4 xl:hidden">
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <div>
+        <div className="text-xs font-black tracking-widest text-emerald-300">SCAN RESULTS</div>
+        <div className="mt-1 font-black text-white">自選股掃描結果</div>
+      </div>
+      <div className="rounded-full border border-emerald-400/40 px-3 py-1 text-xs font-bold text-emerald-200">
+        {scanResults.length} 檔
+      </div>
+    </div>
+
+    <div className="space-y-2">
+      {scanResults.slice(0,5).map((item,index)=>(
+        <button key={item.symbol} type="button" onClick={()=>choose(item)} className="w-full rounded-xl border border-slate-700 bg-slate-950 p-3 text-left active:scale-[0.99]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs text-slate-500">排名 #{index+1}</div>
+              <div className="font-black text-white">{item.quote.name} {item.symbol}</div>
+            </div>
+            <div className={item.ai.trend==="bull"?"text-sm font-black text-emerald-400":item.ai.trend==="bear"?"text-sm font-black text-red-400":"text-sm font-black text-amber-400"}>
+              {item.ai.score} 分
+            </div>
+          </div>
+          <div className="mt-1 text-xs text-slate-400">
+            {item.ai.verdict}｜漲跌 {item.quote.changePercent}%{item.chaseRisk?`｜追高 ${item.chaseRisk.score}`:""}
+          </div>
+        </button>
+      ))}
+    </div>
+
+    <button type="button" onClick={()=>choose(scanResults[0])} className="mt-3 w-full rounded-xl bg-emerald-500 px-4 py-3 text-sm font-black text-white">
+      查看最高分分析
+    </button>
+  </div>
+}
 
 function ScanResultsQuickBlock({scanResults,setData}:{scanResults:AnalyzeResult[]; setData:(d:AnalyzeResult)=>void}){
   if(scanResults.length===0) return null;
