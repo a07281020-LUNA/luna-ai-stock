@@ -34,6 +34,147 @@ type PatternAnalysis = {
   stats:{bodyRatio:number; changePercent:number; last5UpCount:number; last5DownCount:number};
 };
 
+type DiscussionSource = { title:string; url:string; content?:string };
+
+type DiscussionSentiment = {
+  overall:string;
+  score:number;
+  bullishPercent:number;
+  neutralPercent:number;
+  bearishPercent:number;
+  heat:string;
+  keywords:string[];
+  bullishReasons:string[];
+  bearishReasons:string[];
+  summary:string;
+  riskWarning:string;
+  sources:DiscussionSource[];
+};
+
+type ChipAnalysis = {
+  enabled:boolean;
+  status:string;
+  score:number;
+  verdict:string;
+  trend:Trend;
+  latestDate:string|null;
+  institutional:{
+    foreignNetBuy:number;
+    investmentTrustNetBuy:number;
+    dealerNetBuy:number;
+    totalNetBuy:number;
+    fiveDayNetBuy:number;
+    twentyDayNetBuy:number;
+    foreignStreak:{direction:string; days:number; label:string};
+    investmentTrustStreak:{direction:string; days:number; label:string};
+    dealerStreak:{direction:string; days:number; label:string};
+    totalStreak:{direction:string; days:number; label:string};
+    signal:string;
+    reasons:string[];
+  };
+  margin:{
+    marginBalance:number|null;
+    shortBalance:number|null;
+    marginBalanceChange5:number|null;
+    shortBalanceChange5:number|null;
+    marginShortRatio:number|null;
+    signal:string;
+    reasons:string[];
+  };
+  summary:string;
+  riskWarning:string;
+};
+
+
+
+type FundamentalAnalysis = {
+  enabled:boolean;
+  status:string;
+  score:number;
+  verdict:string;
+  trend:Trend;
+  latestRevenueMonth:string|null;
+  monthlyRevenue:number|null;
+  monthlyRevenueYoY:number|null;
+  monthlyRevenueMoM:number|null;
+  eps:number|null;
+  grossMargin:number|null;
+  operatingMargin:number|null;
+  netProfitMargin:number|null;
+  signal:string;
+  reasons:string[];
+  summary:string;
+  riskWarning:string;
+};
+
+type IndustryThemeAnalysis = {
+  enabled:boolean;
+  status:string;
+  score:number;
+  verdict:string;
+  trend:Trend;
+  heat:string;
+  themes:string[];
+  opportunities:string[];
+  risks:string[];
+  summary:string;
+  sources:DiscussionSource[];
+};
+
+type MarketEnvironmentAnalysis = {
+  enabled:boolean;
+  status:string;
+  score:number;
+  verdict:string;
+  trend:Trend;
+  latestDate:string|null;
+  indexName:string;
+  close:number|null;
+  changePercent:number|null;
+  ma5:number|null;
+  ma20:number|null;
+  ma60:number|null;
+  rsi14:number|null;
+  signal:string;
+  reasons:string[];
+  summary:string;
+  riskWarning:string;
+};
+
+
+type ScoreBreakdown = {
+  finalScore:number;
+  verdict:string;
+  trend:Trend;
+  technical:number;
+  chip:number;
+  fundamental:number;
+  industry:number;
+  discussion:number;
+  market:number;
+  riskPenalty:number;
+  confidence:number;
+  reasons:string[];
+};
+
+type AbnormalAlert = { label:string; level:"hot"|"bull"|"watch"|"bear"; message:string };
+
+type StrategyProfile = {
+  shortTerm:{verdict:string; score:number; action:string; reasons:string[]};
+  swing:{verdict:string; score:number; action:string; reasons:string[]};
+  longTerm:{verdict:string; score:number; action:string; reasons:string[]};
+  summary:string;
+};
+
+type DataQuality = {
+  score:number;
+  level:string;
+  okCount:number;
+  totalCount:number;
+  missingModules:string[];
+  warnings:string[];
+};
+
 type AnalyzeResult = {
   success:boolean; symbol:string;
   quote:{name:string; price:number; change:number; changePercent:number; open:number; high:number; low:number; previousClose:number; volume:number};
@@ -53,6 +194,16 @@ type AnalyzeResult = {
   tradePlan?:TradePlan;
   patternAnalysis?:PatternAnalysis;
   chartData?:ChartKBar[];
+  discussionSentiment?:DiscussionSentiment;
+  chipAnalysis?:ChipAnalysis;
+  fundamentalAnalysis?:FundamentalAnalysis;
+  industryThemeAnalysis?:IndustryThemeAnalysis;
+  marketEnvironment?:MarketEnvironmentAnalysis;
+  scoreBreakdown?:ScoreBreakdown;
+  abnormalAlerts?:AbnormalAlert[];
+  strategyProfile?:StrategyProfile;
+  dataQuality?:DataQuality;
+  sourceStatus?:{fugle?:string; finmind?:string; tavily?:string; chip?:string; fundamental?:string; industry?:string; market?:string};
   ai:{score:number; verdict:string; trend:"bull"|"bear"|"neutral"; reasons:string[]; chaseRisk:string};
 };
 
@@ -88,6 +239,42 @@ function formatVolumeLots(value:number|null|undefined){
   return `${Math.round(lots).toLocaleString("zh-TW")} 張`;
 }
 
+function formatSharesToLots(value:number|null|undefined){
+  if(value===null||typeof value==="undefined"||Number.isNaN(Number(value))) return "-";
+  const lots=Number(value)/1000;
+  const absWan=Math.abs(lots)/10000;
+  if(absWan>=1){
+    return `${(lots/10000).toFixed(2)} 萬張`;
+  }
+  return `${Math.round(lots).toLocaleString("zh-TW")} 張`;
+}
+
+
+function formatRevenue(value:number|null|undefined){
+  if(value===null||typeof value==="undefined"||Number.isNaN(Number(value))) return "-";
+  const num=Number(value);
+  const yi=num/100000000;
+  if(Math.abs(yi)>=1) return `${yi.toFixed(2)} 億元`;
+  const wan=num/10000;
+  return `${wan.toFixed(2)} 萬元`;
+}
+
+function getModuleStatusText(status?:string){
+  if(status==="ok") return "已啟用";
+  if(status==="partial") return "部分資料";
+  if(status==="missing_key") return "未設定 Key";
+  if(status==="no_results"||status==="no_data") return "暫無資料";
+  if(status==="error") return "暫時異常";
+  return "待查詢";
+}
+
+function getModuleStatusStyle(status?:string){
+  if(status==="ok") return "text-emerald-300";
+  if(status==="partial"||status==="no_results"||status==="no_data") return "text-amber-300";
+  if(status==="missing_key"||status==="error") return "text-orange-300";
+  return "text-slate-200";
+}
+
 function getTrendStyle(trend?:Trend){
   if(trend==="bull") return "text-emerald-400 border-emerald-400/60 bg-emerald-400/10";
   if(trend==="bear") return "text-red-400 border-red-400/60 bg-red-400/10";
@@ -102,8 +289,47 @@ function getRiskTrend(score:number):Trend{
   return "neutral";
 }
 
+function getDiscussionTrend(overall?:string):Trend{
+  if(!overall) return "neutral";
+  if(overall.includes("多")) return "bull";
+  if(overall.includes("空")) return "bear";
+  if(overall.includes("分歧")) return "warning";
+  return "neutral";
+}
+
+function getDiscussionStatusText(status?:string){
+  if(status==="ok") return "已啟用";
+  if(status==="missing_key") return "未設定 Key";
+  if(status==="no_results") return "暫無資料";
+  if(status==="error") return "暫時異常";
+  return "待查詢";
+}
+
+function getDiscussionStatusStyle(status?:string){
+  if(status==="ok") return "text-emerald-300";
+  if(status==="missing_key"||status==="error") return "text-orange-300";
+  if(status==="no_results") return "text-amber-300";
+  return "text-slate-200";
+}
+
+function getChipStatusText(status?:string){
+  if(status==="ok") return "已啟用";
+  if(status==="partial") return "部分資料";
+  if(status==="no_data") return "暫無資料";
+  if(status==="error") return "暫時異常";
+  return "待查詢";
+}
+
+function getChipStatusStyle(status?:string){
+  if(status==="ok") return "text-emerald-300";
+  if(status==="partial"||status==="no_data") return "text-amber-300";
+  if(status==="error") return "text-orange-300";
+  return "text-slate-200";
+}
+
 function getAlert(result:AnalyzeResult){
   const alerts:{label:string;level:"hot"|"bull"|"watch"|"bear";message:string}[]=[];
+  result.abnormalAlerts?.slice(0,4).forEach((item)=>alerts.push(item));
   if(result.ai.score>=85) alerts.push({label:"🔥 強勢偏多",level:"bull",message:"AI 分數高於 85，技術面非常強，但仍要注意追高風險。"});
   else if(result.ai.score>=75) alerts.push({label:"👀 值得觀察",level:"watch",message:"AI 分數高於 75，趨勢偏多，可列入觀察清單。"});
   if(result.patternAnalysis?.trend==="bull") alerts.push({label:"📊 型態偏多",level:"bull",message:"K線型態偏多，短線結構較強。"});
@@ -121,6 +347,18 @@ function getAlert(result:AnalyzeResult){
   if(result.supportResistance?.trend==="bear") alerts.push({label:"⚠️ 跌破支撐",level:"bear",message:"股價跌破近期支撐區，短線風險升高。"});
   if(result.supportResistance?.trend==="warning") alerts.push({label:"⛔ 接近壓力",level:"hot",message:"目前接近壓力區，追價空間有限。"});
   if(result.ai.score<=40) alerts.push({label:"📉 偏弱警示",level:"bear",message:"AI 分數低於 40，技術面偏弱，建議等止跌訊號。"});
+  if(result.discussionSentiment?.overall?.includes("多")) alerts.push({label:"💬 討論偏多",level:"bull",message:"公開討論區目前偏多，代表市場關注度與正向情緒較高。"});
+  if(result.discussionSentiment?.overall?.includes("空")) alerts.push({label:"💬 討論偏空",level:"bear",message:"公開討論區目前偏空，需留意市場疑慮與負面情緒。"});
+  if(result.discussionSentiment?.overall?.includes("分歧")) alerts.push({label:"💬 多空分歧",level:"hot",message:"公開討論區多空看法分歧，短線波動可能較大。"});
+  if(result.chipAnalysis?.trend==="bull") alerts.push({label:"🏦 籌碼偏多",level:"bull",message:"法人或融資融券結構偏多，籌碼面對股價較有支撐。"});
+  if(result.chipAnalysis?.trend==="bear") alerts.push({label:"🏦 籌碼偏空",level:"bear",message:"法人賣超或籌碼結構轉弱，短線需留意賣壓。"});
+  if(result.chipAnalysis?.trend==="warning") alerts.push({label:"🏦 籌碼警示",level:"hot",message:"籌碼面出現警示，例如融資增加但股價未同步轉強。"});
+  if(result.fundamentalAnalysis?.trend==="bull") alerts.push({label:"📘 基本面偏多",level:"bull",message:"營收或財報數據偏正向，中長期支撐較佳。"});
+  if(result.fundamentalAnalysis?.trend==="bear") alerts.push({label:"📘 基本面偏空",level:"bear",message:"營收或財報數據偏弱，需留意獲利與成長壓力。"});
+  if(result.industryThemeAnalysis?.trend==="bull") alerts.push({label:"🚀 題材偏多",level:"bull",message:"產業題材與市場敘事偏正向。"});
+  if(result.industryThemeAnalysis?.trend==="warning") alerts.push({label:"🔥 題材過熱",level:"hot",message:"題材熱度高，需防利多鈍化或追高。"});
+  if(result.marketEnvironment?.trend==="bull") alerts.push({label:"🌏 大盤偏多",level:"bull",message:"大盤環境偏多，個股操作勝率相對提高。"});
+  if(result.marketEnvironment?.trend==="bear") alerts.push({label:"🌏 大盤偏空",level:"bear",message:"大盤環境偏弱，個股操作要更保守。"});
   if(alerts.length===0) alerts.push({label:"🟡 中性觀察",level:"watch",message:"目前沒有明顯強弱警示，適合等待更明確訊號。"});
   return alerts;
 }
@@ -141,6 +379,88 @@ function buildAnalysisReport(data: AnalyzeResult) {
   lines.push(`目前價格：${formatPrice(data.quote.price)}`);
   lines.push(`漲跌幅：${data.quote.changePercent}%`);
   lines.push(``);
+
+  if (data.chipAnalysis) {
+    lines.push(`籌碼面判斷：${data.chipAnalysis.verdict}`);
+    lines.push(`籌碼分數：${data.chipAnalysis.score}`);
+    lines.push(`法人訊號：${data.chipAnalysis.institutional.signal}`);
+    lines.push(`外資買賣超：${formatSharesToLots(data.chipAnalysis.institutional.foreignNetBuy)}`);
+    lines.push(`投信買賣超：${formatSharesToLots(data.chipAnalysis.institutional.investmentTrustNetBuy)}`);
+    lines.push(`自營商買賣超：${formatSharesToLots(data.chipAnalysis.institutional.dealerNetBuy)}`);
+    lines.push(`5日法人合計：${formatSharesToLots(data.chipAnalysis.institutional.fiveDayNetBuy)}`);
+    lines.push(`融資融券：${data.chipAnalysis.margin.signal}`);
+    lines.push(`融資餘額：${formatSharesToLots(data.chipAnalysis.margin.marginBalance)}`);
+    lines.push(`融券餘額：${formatSharesToLots(data.chipAnalysis.margin.shortBalance)}`);
+    lines.push(`籌碼總結：${data.chipAnalysis.summary}`);
+    lines.push(``);
+  }
+
+  if (data.discussionSentiment) {
+    lines.push(`公開討論區風向：${data.discussionSentiment.overall}`);
+    lines.push(`討論風向分數：${data.discussionSentiment.score}`);
+    lines.push(`看多/中立/看空：${data.discussionSentiment.bullishPercent}% / ${data.discussionSentiment.neutralPercent}% / ${data.discussionSentiment.bearishPercent}%`);
+    lines.push(`討論熱度：${data.discussionSentiment.heat}`);
+    if (data.discussionSentiment.keywords?.length) lines.push(`熱門關鍵字：${data.discussionSentiment.keywords.join("、")}`);
+    if (data.discussionSentiment.summary) lines.push(`風向總結：${data.discussionSentiment.summary}`);
+    lines.push(``);
+  }
+
+  if (data.fundamentalAnalysis) {
+    lines.push(`基本面判斷：${data.fundamentalAnalysis.verdict}`);
+    lines.push(`基本面分數：${data.fundamentalAnalysis.score}`);
+    lines.push(`月營收：${formatRevenue(data.fundamentalAnalysis.monthlyRevenue)}`);
+    lines.push(`營收年增：${formatPercent(data.fundamentalAnalysis.monthlyRevenueYoY)}`);
+    lines.push(`營收月增：${formatPercent(data.fundamentalAnalysis.monthlyRevenueMoM)}`);
+    lines.push(`EPS：${formatTech(data.fundamentalAnalysis.eps)}`);
+    lines.push(`基本面總結：${data.fundamentalAnalysis.summary}`);
+    lines.push(``);
+  }
+
+  if (data.industryThemeAnalysis) {
+    lines.push(`產業題材：${data.industryThemeAnalysis.verdict}`);
+    lines.push(`題材分數：${data.industryThemeAnalysis.score}`);
+    lines.push(`題材熱度：${data.industryThemeAnalysis.heat}`);
+    if (data.industryThemeAnalysis.themes?.length) lines.push(`主要題材：${data.industryThemeAnalysis.themes.join("、")}`);
+    lines.push(`題材總結：${data.industryThemeAnalysis.summary}`);
+    lines.push(``);
+  }
+
+  if (data.marketEnvironment) {
+    lines.push(`大盤環境：${data.marketEnvironment.verdict}`);
+    lines.push(`大盤分數：${data.marketEnvironment.score}`);
+    lines.push(`大盤收盤：${formatPrice(data.marketEnvironment.close)}`);
+    lines.push(`大盤漲跌：${formatPercent(data.marketEnvironment.changePercent)}`);
+    lines.push(`大盤總結：${data.marketEnvironment.summary}`);
+    lines.push(``);
+  }
+
+  if (data.scoreBreakdown) {
+    lines.push(`綜合總分：${data.scoreBreakdown.finalScore}｜${data.scoreBreakdown.verdict}`);
+    lines.push(`技術/籌碼/基本/題材/討論/大盤：${data.scoreBreakdown.technical}/${data.scoreBreakdown.chip}/${data.scoreBreakdown.fundamental}/${data.scoreBreakdown.industry}/${data.scoreBreakdown.discussion}/${data.scoreBreakdown.market}`);
+    lines.push(`風險修正：${data.scoreBreakdown.riskPenalty}`);
+    lines.push(`資料可信度：${data.scoreBreakdown.confidence}%`);
+    lines.push(``);
+  }
+
+  if (data.strategyProfile) {
+    lines.push(`策略分層：${data.strategyProfile.summary}`);
+    lines.push(`短線：${data.strategyProfile.shortTerm.verdict}｜${data.strategyProfile.shortTerm.score}｜${data.strategyProfile.shortTerm.action}`);
+    lines.push(`波段：${data.strategyProfile.swing.verdict}｜${data.strategyProfile.swing.score}｜${data.strategyProfile.swing.action}`);
+    lines.push(`長期：${data.strategyProfile.longTerm.verdict}｜${data.strategyProfile.longTerm.score}｜${data.strategyProfile.longTerm.action}`);
+    lines.push(``);
+  }
+
+  if (data.abnormalAlerts?.length) {
+    lines.push(`異常警報：`);
+    data.abnormalAlerts.forEach((item,index)=>lines.push(`${index+1}. ${item.label}：${item.message}`));
+    lines.push(``);
+  }
+
+  if (data.dataQuality) {
+    lines.push(`資料完整度：${data.dataQuality.score}%｜${data.dataQuality.level}`);
+    if (data.dataQuality.missingModules?.length) lines.push(`資料不足模組：${data.dataQuality.missingModules.join("、")}`);
+    lines.push(``);
+  }
 
   if (data.chaseRisk) {
     lines.push(`追高風險：${data.chaseRisk.score} 分｜${data.chaseRisk.level}`);
@@ -327,10 +647,10 @@ export default function Home(){
             <div>
               <div className="mb-2 text-xs font-bold tracking-[0.35em] text-cyan-400">LUNA AI STOCK RADAR</div>
               <h1 className="text-3xl font-black leading-tight md:text-6xl">台股 AI 技術分析儀表板</h1>
-              <p className="mt-3 text-sm text-slate-400 md:text-base">即時報價 × K線圖 × 型態辨識 × 交易計畫 × 追高風險</p>
+              <p className="mt-3 text-sm text-slate-400 md:text-base">即時報價 × K線圖 × 籌碼面 × 基本面 × 產業題材 × 大盤環境 × 公開討論區風向</p>
             </div>
             <div className="rounded-2xl border border-slate-700 bg-slate-900 px-5 py-4 text-sm text-slate-300">
-              <div>資料來源：Fugle + FinMind</div>
+              <div>資料來源：Fugle + FinMind + Tavily</div>
               <div className="mt-1 text-cyan-400">後端 API 已啟用</div>
             </div>
           </div>
@@ -401,12 +721,17 @@ export default function Home(){
               <div className="space-y-3 text-sm text-slate-300">
                 <StatusRow label="Fugle 即時報價" value="已啟用" />
                 <StatusRow label="FinMind K棒" value="已啟用" />
+                <StatusRow label="FinMind 籌碼面" value={getChipStatusText(data?.sourceStatus?.chip)} valueClassName={getChipStatusStyle(data?.sourceStatus?.chip)} />
+                <StatusRow label="Tavily 公開討論區" value={getDiscussionStatusText(data?.sourceStatus?.tavily)} valueClassName={getDiscussionStatusStyle(data?.sourceStatus?.tavily)} />
                 <StatusRow label="K線圖" value="已啟用" />
                 <StatusRow label="K線型態辨識" value="已啟用" />
                 <StatusRow label="成交量分析" value="已啟用" />
                 <StatusRow label="支撐壓力分析" value="已啟用" />
                 <StatusRow label="追高風險分數" value="已啟用" />
                 <StatusRow label="交易計畫" value="已啟用" />
+                <StatusRow label="基本面財報" value={getModuleStatusText(data?.sourceStatus?.fundamental)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.fundamental)} />
+                <StatusRow label="產業題材" value={getModuleStatusText(data?.sourceStatus?.industry)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.industry)} />
+                <StatusRow label="大盤環境" value={getModuleStatusText(data?.sourceStatus?.market)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.market)} />
                 <StatusRow label="資料儲存" value="本機瀏覽器" />
               </div>
             </Panel>
@@ -452,8 +777,260 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
           <Metric label="昨收價" value={data.quote.previousClose} />
           <Metric label="成交量" value={formatVolumeLots(data.quote.volume)} />
           <Metric label="AI分數" value={data.ai.score} trend={data.ai.trend} />
+          {data.scoreBreakdown && <Metric label="綜合總分" value={`${data.scoreBreakdown.finalScore} / 100`} trend={data.scoreBreakdown.trend} />}
+          {data.dataQuality && <Metric label="資料完整度" value={`${data.dataQuality.score}%`} trend={data.dataQuality.score>=80?"bull":data.dataQuality.score>=55?"warning":"bear"} />}
+          {data.discussionSentiment && <Metric label="討論風向" value={data.discussionSentiment.overall} trend={getDiscussionTrend(data.discussionSentiment.overall)} />}
+          {data.chipAnalysis && <Metric label="籌碼分數" value={`${data.chipAnalysis.score} / 100`} trend={data.chipAnalysis.trend} />}
+          {data.fundamentalAnalysis && <Metric label="基本面分數" value={`${data.fundamentalAnalysis.score} / 100`} trend={data.fundamentalAnalysis.trend} />}
+          {data.industryThemeAnalysis && <Metric label="題材分數" value={`${data.industryThemeAnalysis.score} / 100`} trend={data.industryThemeAnalysis.trend} />}
+          {data.marketEnvironment && <Metric label="大盤環境" value={data.marketEnvironment.verdict} trend={data.marketEnvironment.trend} />}
         </div>
       </div>
+
+      {data.scoreBreakdown && <Block title="AI 綜合總分拆解">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.scoreBreakdown.trend)}`}>
+            綜合判斷：{data.scoreBreakdown.verdict}｜{data.scoreBreakdown.finalScore} 分
+          </div>
+          <div className="text-sm text-slate-400">資料可信度：{data.scoreBreakdown.confidence}%｜風險修正：{data.scoreBreakdown.riskPenalty}</div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Metric label="技術面" value={`${data.scoreBreakdown.technical} 分`} trend={data.scoreBreakdown.technical>=65?"bull":data.scoreBreakdown.technical<=40?"bear":"neutral"} />
+          <Metric label="籌碼面" value={`${data.scoreBreakdown.chip} 分`} trend={data.scoreBreakdown.chip>=65?"bull":data.scoreBreakdown.chip<=40?"bear":"neutral"} />
+          <Metric label="基本面" value={`${data.scoreBreakdown.fundamental} 分`} trend={data.scoreBreakdown.fundamental>=65?"bull":data.scoreBreakdown.fundamental<=40?"bear":"neutral"} />
+          <Metric label="產業題材" value={`${data.scoreBreakdown.industry} 分`} trend={data.scoreBreakdown.industry>=65?"bull":data.scoreBreakdown.industry<=40?"bear":"neutral"} />
+          <Metric label="討論區" value={`${data.scoreBreakdown.discussion} 分`} trend={data.scoreBreakdown.discussion>=65?"bull":data.scoreBreakdown.discussion<=40?"bear":"neutral"} />
+          <Metric label="大盤環境" value={`${data.scoreBreakdown.market} 分`} trend={data.scoreBreakdown.market>=65?"bull":data.scoreBreakdown.market<=40?"bear":"neutral"} />
+          <Metric label="風險修正" value={data.scoreBreakdown.riskPenalty} trend={data.scoreBreakdown.riskPenalty<0?"warning":"bull"} />
+          <Metric label="可信度" value={`${data.scoreBreakdown.confidence}%`} trend={data.scoreBreakdown.confidence>=80?"bull":data.scoreBreakdown.confidence>=55?"warning":"bear"} />
+        </div>
+        <ReasonList reasons={data.scoreBreakdown.reasons} />
+      </Block>}
+
+      {data.strategyProfile && <Block title="短線 / 波段 / 長期策略分層">
+        <div className="mb-5 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5">
+          <div className="mb-2 font-black text-cyan-400">策略總結</div>
+          <div className="leading-7 text-slate-200">{data.strategyProfile.summary}</div>
+        </div>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <StrategyCard title="短線" item={data.strategyProfile.shortTerm} />
+          <StrategyCard title="波段" item={data.strategyProfile.swing} />
+          <StrategyCard title="長期" item={data.strategyProfile.longTerm} />
+        </div>
+      </Block>}
+
+      {data.abnormalAlerts?.length ? <Block title="異常警報雷達">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          {data.abnormalAlerts.map((alert,index)=><AlertCard key={index} alert={alert} />)}
+        </div>
+      </Block> : null}
+
+      {data.dataQuality && <Block title="資料完整度 / 可信度">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.dataQuality.score>=80?"bull":data.dataQuality.score>=55?"warning":"bear")}`}>
+            資料完整度：{data.dataQuality.score}%｜{data.dataQuality.level}
+          </div>
+          <div className="text-sm text-slate-400">{data.dataQuality.okCount} / {data.dataQuality.totalCount} 個資料模組有回傳</div>
+        </div>
+        <ReasonList reasons={data.dataQuality.warnings} />
+      </Block>}
+
+      {data.chipAnalysis && <Block title="籌碼面分析">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.chipAnalysis.trend)}`}>
+            籌碼判斷：{data.chipAnalysis.verdict}｜{data.chipAnalysis.score} 分
+          </div>
+          <div className="text-sm text-slate-400">最新資料日：{data.chipAnalysis.latestDate || "資料不足"}｜來源：FinMind</div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Metric label="外資買賣超" value={formatSharesToLots(data.chipAnalysis.institutional.foreignNetBuy)} trend={data.chipAnalysis.institutional.foreignNetBuy>=0?"bull":"bear"} />
+          <Metric label="投信買賣超" value={formatSharesToLots(data.chipAnalysis.institutional.investmentTrustNetBuy)} trend={data.chipAnalysis.institutional.investmentTrustNetBuy>=0?"bull":"bear"} />
+          <Metric label="自營商買賣超" value={formatSharesToLots(data.chipAnalysis.institutional.dealerNetBuy)} trend={data.chipAnalysis.institutional.dealerNetBuy>=0?"bull":"bear"} />
+          <Metric label="三大法人合計" value={formatSharesToLots(data.chipAnalysis.institutional.totalNetBuy)} trend={data.chipAnalysis.institutional.totalNetBuy>=0?"bull":"bear"} />
+          <Metric label="5日法人合計" value={formatSharesToLots(data.chipAnalysis.institutional.fiveDayNetBuy)} trend={data.chipAnalysis.institutional.fiveDayNetBuy>=0?"bull":"bear"} />
+          <Metric label="20日法人合計" value={formatSharesToLots(data.chipAnalysis.institutional.twentyDayNetBuy)} trend={data.chipAnalysis.institutional.twentyDayNetBuy>=0?"bull":"bear"} />
+          <Metric label="外資連買賣" value={data.chipAnalysis.institutional.foreignStreak?.label || "資料不足"} trend={data.chipAnalysis.institutional.foreignStreak?.direction==="買超"?"bull":data.chipAnalysis.institutional.foreignStreak?.direction==="賣超"?"bear":"neutral"} />
+          <Metric label="投信連買賣" value={data.chipAnalysis.institutional.investmentTrustStreak?.label || "資料不足"} trend={data.chipAnalysis.institutional.investmentTrustStreak?.direction==="買超"?"bull":data.chipAnalysis.institutional.investmentTrustStreak?.direction==="賣超"?"bear":"neutral"} />
+          <Metric label="法人訊號" value={data.chipAnalysis.institutional.signal} trend={data.chipAnalysis.trend} />
+          <Metric label="融資融券訊號" value={data.chipAnalysis.margin.signal} trend={data.chipAnalysis.trend} />
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Metric label="融資餘額" value={formatSharesToLots(data.chipAnalysis.margin.marginBalance)} />
+          <Metric label="融資5日變化" value={formatSharesToLots(data.chipAnalysis.margin.marginBalanceChange5)} trend={data.chipAnalysis.margin.marginBalanceChange5!==null&&data.chipAnalysis.margin.marginBalanceChange5<=0?"bull":"warning"} />
+          <Metric label="融券餘額" value={formatSharesToLots(data.chipAnalysis.margin.shortBalance)} />
+          <Metric label="融券5日變化" value={formatSharesToLots(data.chipAnalysis.margin.shortBalanceChange5)} trend={data.chipAnalysis.margin.shortBalanceChange5!==null&&data.chipAnalysis.margin.shortBalanceChange5>=0?"warning":"neutral"} />
+        </div>
+
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-cyan-400/30 bg-slate-950 p-5">
+            <div className="mb-3 font-black text-cyan-300">法人籌碼重點</div>
+            <div className="space-y-2 text-sm leading-6 text-slate-200">
+              {(data.chipAnalysis.institutional.reasons?.length ? data.chipAnalysis.institutional.reasons : ["目前法人資料不足，暫時無法判斷。 "]).map((item,index)=><div key={index}>• {item}</div>)}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-purple-400/30 bg-slate-950 p-5">
+            <div className="mb-3 font-black text-purple-300">融資融券重點</div>
+            <div className="space-y-2 text-sm leading-6 text-slate-200">
+              {(data.chipAnalysis.margin.reasons?.length ? data.chipAnalysis.margin.reasons : ["目前融資融券資料不足，暫時無法判斷。 "]).map((item,index)=><div key={index}>• {item}</div>)}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5">
+          <div className="mb-2 font-black text-cyan-400">籌碼總結</div>
+          <div className="leading-7 text-slate-200">{data.chipAnalysis.summary}</div>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-5 text-sm leading-6 text-amber-100">
+          {data.chipAnalysis.riskWarning || "籌碼面只代表市場資金流向，不等於買賣建議。"}
+        </div>
+      </Block>}
+
+      {data.discussionSentiment && <Block title="公開討論區風向分析">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(getDiscussionTrend(data.discussionSentiment.overall))}`}>
+            討論風向：{data.discussionSentiment.overall}
+          </div>
+          <div className="text-sm text-slate-400">熱度：{data.discussionSentiment.heat}｜來源：Tavily 公開搜尋</div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Metric label="風向分數" value={`${data.discussionSentiment.score} / 100`} trend={getDiscussionTrend(data.discussionSentiment.overall)} />
+          <Metric label="看多比例" value={`${data.discussionSentiment.bullishPercent}%`} trend="bull" />
+          <Metric label="中立比例" value={`${data.discussionSentiment.neutralPercent}%`} trend="neutral" />
+          <Metric label="看空比例" value={`${data.discussionSentiment.bearishPercent}%`} trend="bear" />
+        </div>
+
+        {data.discussionSentiment.keywords?.length > 0 && (
+          <div className="mt-5">
+            <div className="mb-3 text-sm font-black tracking-widest text-slate-400">熱門關鍵字</div>
+            <div className="flex flex-wrap gap-2">
+              {data.discussionSentiment.keywords.map((item,index)=><span key={index} className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-sm font-bold text-cyan-300">{item}</span>)}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-5">
+            <div className="mb-3 font-black text-emerald-300">看多討論重點</div>
+            <div className="space-y-2 text-sm leading-6 text-slate-200">
+              {(data.discussionSentiment.bullishReasons?.length ? data.discussionSentiment.bullishReasons : ["目前沒有明確看多討論重點。"]).map((item,index)=><div key={index}>• {item}</div>)}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
+            <div className="mb-3 font-black text-red-300">看空討論重點</div>
+            <div className="space-y-2 text-sm leading-6 text-slate-200">
+              {(data.discussionSentiment.bearishReasons?.length ? data.discussionSentiment.bearishReasons : ["目前沒有明確看空討論重點。"]).map((item,index)=><div key={index}>• {item}</div>)}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5">
+          <div className="mb-2 font-black text-cyan-400">AI 風向總結</div>
+          <div className="leading-7 text-slate-200">{data.discussionSentiment.summary || "目前公開討論資料不足，暫時無法形成可靠風向。"}</div>
+        </div>
+
+        <div className="mt-5 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-5 text-sm leading-6 text-amber-100">
+          {data.discussionSentiment.riskWarning || "公開討論區風向只代表市場情緒，不等於買賣建議。"}
+        </div>
+
+        {data.discussionSentiment.sources?.length > 0 && (
+          <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5">
+            <div className="mb-3 font-black text-slate-300">公開資料來源</div>
+            <div className="space-y-2">
+              {data.discussionSentiment.sources.slice(0,6).map((source,index)=>(
+                <a key={`${source.url}-${index}`} href={source.url} target="_blank" rel="noreferrer" className="block rounded-xl border border-slate-800 bg-slate-900 p-3 text-sm text-cyan-300 hover:border-cyan-400/50">
+                  {source.title || source.url}
+                </a>
+              ))}
+            </div>
+          </div>
+        )}
+      </Block>}
+
+
+      {data.fundamentalAnalysis && <Block title="基本面財報分析">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.fundamentalAnalysis.trend)}`}>
+            基本面判斷：{data.fundamentalAnalysis.verdict}｜{data.fundamentalAnalysis.score} 分
+          </div>
+          <div className="text-sm text-slate-400">最新營收月份：{data.fundamentalAnalysis.latestRevenueMonth || "資料不足"}｜來源：FinMind</div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Metric label="月營收" value={formatRevenue(data.fundamentalAnalysis.monthlyRevenue)} />
+          <Metric label="營收年增率" value={formatPercent(data.fundamentalAnalysis.monthlyRevenueYoY)} trend={data.fundamentalAnalysis.monthlyRevenueYoY!==null&&data.fundamentalAnalysis.monthlyRevenueYoY>=0?"bull":"bear"} />
+          <Metric label="營收月增率" value={formatPercent(data.fundamentalAnalysis.monthlyRevenueMoM)} trend={data.fundamentalAnalysis.monthlyRevenueMoM!==null&&data.fundamentalAnalysis.monthlyRevenueMoM>=0?"bull":"bear"} />
+          <Metric label="基本面訊號" value={data.fundamentalAnalysis.signal} trend={data.fundamentalAnalysis.trend} />
+          <Metric label="EPS" value={formatTech(data.fundamentalAnalysis.eps)} trend={data.fundamentalAnalysis.eps!==null&&data.fundamentalAnalysis.eps>=0?"bull":"bear"} />
+          <Metric label="毛利率" value={formatPercent(data.fundamentalAnalysis.grossMargin)} />
+          <Metric label="營益率" value={formatPercent(data.fundamentalAnalysis.operatingMargin)} />
+          <Metric label="淨利率" value={formatPercent(data.fundamentalAnalysis.netProfitMargin)} />
+        </div>
+        <ReasonList reasons={data.fundamentalAnalysis.reasons} />
+        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5">
+          <div className="mb-2 font-black text-cyan-400">基本面總結</div>
+          <div className="leading-7 text-slate-200">{data.fundamentalAnalysis.summary}</div>
+        </div>
+      </Block>}
+
+      {data.industryThemeAnalysis && <Block title="產業題材分析">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.industryThemeAnalysis.trend)}`}>
+            題材判斷：{data.industryThemeAnalysis.verdict}｜{data.industryThemeAnalysis.score} 分
+          </div>
+          <div className="text-sm text-slate-400">熱度：{data.industryThemeAnalysis.heat}｜來源：Tavily 公開搜尋</div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Metric label="題材分數" value={`${data.industryThemeAnalysis.score} / 100`} trend={data.industryThemeAnalysis.trend} />
+          <Metric label="題材熱度" value={data.industryThemeAnalysis.heat} trend={data.industryThemeAnalysis.heat==="高"?"warning":"neutral"} />
+          <Metric label="題材判斷" value={data.industryThemeAnalysis.verdict} trend={data.industryThemeAnalysis.trend} />
+          <Metric label="題材數量" value={data.industryThemeAnalysis.themes?.length || 0} />
+        </div>
+        {data.industryThemeAnalysis.themes?.length > 0 && <div className="mt-5 flex flex-wrap gap-2">
+          {data.industryThemeAnalysis.themes.map((item,index)=><span key={index} className="rounded-full border border-purple-400/30 bg-purple-400/10 px-3 py-1 text-sm font-bold text-purple-300">{item}</span>)}
+        </div>}
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-5">
+            <div className="mb-3 font-black text-emerald-300">題材機會</div>
+            <div className="space-y-2 text-sm leading-6 text-slate-200">{(data.industryThemeAnalysis.opportunities?.length?data.industryThemeAnalysis.opportunities:["目前沒有明確題材機會。 "]).map((item,index)=><div key={index}>• {item}</div>)}</div>
+          </div>
+          <div className="rounded-2xl border border-red-400/30 bg-red-400/10 p-5">
+            <div className="mb-3 font-black text-red-300">題材風險</div>
+            <div className="space-y-2 text-sm leading-6 text-slate-200">{(data.industryThemeAnalysis.risks?.length?data.industryThemeAnalysis.risks:["目前沒有明確題材風險。 "]).map((item,index)=><div key={index}>• {item}</div>)}</div>
+          </div>
+        </div>
+        <div className="mt-5 rounded-2xl border border-slate-700 bg-slate-950 p-5">
+          <div className="mb-2 font-black text-cyan-400">題材總結</div>
+          <div className="leading-7 text-slate-200">{data.industryThemeAnalysis.summary}</div>
+        </div>
+      </Block>}
+
+      {data.marketEnvironment && <Block title="大盤環境分析">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.marketEnvironment.trend)}`}>
+            大盤判斷：{data.marketEnvironment.verdict}｜{data.marketEnvironment.score} 分
+          </div>
+          <div className="text-sm text-slate-400">{data.marketEnvironment.indexName}｜{data.marketEnvironment.latestDate || "資料不足"}</div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+          <Metric label="大盤收盤" value={formatPrice(data.marketEnvironment.close)} />
+          <Metric label="大盤漲跌幅" value={formatPercent(data.marketEnvironment.changePercent)} trend={data.marketEnvironment.changePercent!==null&&data.marketEnvironment.changePercent>=0?"bull":"bear"} />
+          <Metric label="大盤 MA5" value={formatTech(data.marketEnvironment.ma5)} />
+          <Metric label="大盤 MA20" value={formatTech(data.marketEnvironment.ma20)} />
+          <Metric label="大盤 MA60" value={formatTech(data.marketEnvironment.ma60)} />
+          <Metric label="大盤 RSI" value={formatTech(data.marketEnvironment.rsi14)} />
+          <Metric label="大盤訊號" value={data.marketEnvironment.signal} trend={data.marketEnvironment.trend} />
+          <Metric label="大盤分數" value={`${data.marketEnvironment.score} / 100`} trend={data.marketEnvironment.trend} />
+        </div>
+        <ReasonList reasons={data.marketEnvironment.reasons} />
+        <div className="mt-5 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-5 text-sm leading-6 text-amber-100">
+          {data.marketEnvironment.riskWarning}
+        </div>
+      </Block>}
 
       <Block title="K線圖"><CandlestickChart data={data.chartData||[]} /></Block>
 
@@ -613,6 +1190,12 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
                 {item.chaseRisk?`｜追高風險：${item.chaseRisk.score}`:""}
                 {item.supportResistance?`｜壓力支撐：${item.supportResistance.signal}`:""}
                 {item.volumeAnalysis?`｜量能：${item.volumeAnalysis.signal}`:""}
+                {item.discussionSentiment?`｜討論：${item.discussionSentiment.overall}`:""}
+                {item.chipAnalysis?`｜籌碼：${item.chipAnalysis.verdict} ${item.chipAnalysis.score}分`:""}
+                {item.fundamentalAnalysis?`｜基本面：${item.fundamentalAnalysis.verdict} ${item.fundamentalAnalysis.score}分`:""}
+                {item.industryThemeAnalysis?`｜題材：${item.industryThemeAnalysis.verdict} ${item.industryThemeAnalysis.score}分`:""}
+                {item.marketEnvironment?`｜大盤：${item.marketEnvironment.verdict} ${item.marketEnvironment.score}分`:""}
+                {item.scoreBreakdown?`｜綜合：${item.scoreBreakdown.verdict} ${item.scoreBreakdown.finalScore}分`:""}
               </div>
               <div className="mt-3 flex flex-wrap gap-2">{alerts.map((alert,i)=><AlertPill key={i} alert={alert} />)}</div>
             </button>
@@ -621,6 +1204,18 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
       </Block>}
     </>
   );
+}
+
+function StrategyCard({title,item}:{title:string;item:{verdict:string;score:number;action:string;reasons:string[]}}){
+  const trend:Trend=item.score>=70?"bull":item.score<=42?"bear":"warning";
+  return <div className={`rounded-2xl border p-5 ${getTrendStyle(trend)}`}>
+    <div className="mb-2 text-sm font-bold tracking-widest opacity-80">{title}</div>
+    <div className="text-2xl font-black">{item.verdict}｜{item.score}</div>
+    <div className="mt-3 rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm leading-6 text-slate-200">{item.action}</div>
+    <div className="mt-3 space-y-2 text-sm leading-6 text-slate-300">
+      {item.reasons.map((reason,index)=><div key={index}>• {reason}</div>)}
+    </div>
+  </div>
 }
 
 function CandlestickChart({data}:{data:ChartKBar[]}){
@@ -657,4 +1252,4 @@ function AlertPill({alert}:{alert:{label:string;level:"hot"|"bull"|"watch"|"bear
   const style=alert.level==="bull"?"bg-emerald-400/10 text-emerald-300 border-emerald-400/30":alert.level==="bear"?"bg-red-400/10 text-red-300 border-red-400/30":alert.level==="hot"?"bg-orange-400/10 text-orange-300 border-orange-400/30":"bg-amber-400/10 text-amber-300 border-amber-400/30";
   return <span className={`rounded-full border px-3 py-1 text-xs ${style}`}>{alert.label}</span>
 }
-function StatusRow({label,value}:{label:string;value:string}){return <div className="flex items-center justify-between border-b border-slate-800 pb-2"><span className="text-slate-500">{label}</span><span className="font-bold text-slate-200">{value}</span></div>}
+function StatusRow({label,value,valueClassName}:{label:string;value:string;valueClassName?:string}){return <div className="flex items-center justify-between border-b border-slate-800 pb-2"><span className="text-slate-500">{label}</span><span className={`font-bold ${valueClassName || "text-slate-200"}`}>{value}</span></div>}
