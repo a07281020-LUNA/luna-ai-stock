@@ -1557,26 +1557,30 @@ function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeR
       </>}
 
       {activeTab==="strategy" && <>
-        {data.strategyProfile && <Block title="短線 / 波段 / 長期">
+        <AIDecisionCenter data={data} />
+
+        {data.tradePlan && <Block title="關鍵價格計畫">
+          <div className="grid grid-cols-2 gap-3">
+            <Metric label="拉回觀察下緣" value={formatPrice(data.tradePlan.pullbackZone.low)} />
+            <Metric label="拉回觀察上緣" value={formatPrice(data.tradePlan.pullbackZone.high)} />
+            <Metric label="突破確認價" value={formatPrice(data.tradePlan.breakoutPrice)} trend="bull" />
+            <Metric label="停損參考價" value={formatPrice(data.tradePlan.stopLossPrice)} trend="bear" />
+            <Metric label="觀察區下緣" value={formatPrice(data.tradePlan.observationZone.low)} />
+            <Metric label="觀察區上緣" value={formatPrice(data.tradePlan.observationZone.high)} />
+          </div>
+          <div className="mt-4 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5 leading-7 text-slate-200">{data.tradePlan.action}</div>
+          <ReasonList reasons={data.tradePlan.reasons?.slice(0,4)||[]} />
+        </Block>}
+
+        {data.strategyProfile && <Block title="操作週期輔助判斷">
           <div className="mb-4 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5 leading-7 text-slate-200">{data.strategyProfile.summary}</div>
           <div className="space-y-3">
-            <StrategyCard title="短線" item={data.strategyProfile.shortTerm} />
-            <StrategyCard title="波段" item={data.strategyProfile.swing} />
-            <StrategyCard title="長期" item={data.strategyProfile.longTerm} />
+            <CycleDecisionRow title="短線" item={data.strategyProfile.shortTerm} />
+            <CycleDecisionRow title="波段" item={data.strategyProfile.swing} />
+            <CycleDecisionRow title="長期" item={data.strategyProfile.longTerm} />
           </div>
         </Block>}
-        {data.tradePlan && <Block title="AI 進場策略">
-          <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.ai.trend)}`}>{data.tradePlan.stance}</div>
-          <div className="mt-4 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5 leading-7 text-slate-200">{data.tradePlan.action}</div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <Metric label="觀察下緣" value={formatPrice(data.tradePlan.observationZone.low)} />
-            <Metric label="觀察上緣" value={formatPrice(data.tradePlan.observationZone.high)} />
-            <Metric label="拉回下緣" value={formatPrice(data.tradePlan.pullbackZone.low)} />
-            <Metric label="拉回上緣" value={formatPrice(data.tradePlan.pullbackZone.high)} />
-            <Metric label="突破確認" value={formatPrice(data.tradePlan.breakoutPrice)} trend="bull" />
-            <Metric label="停損參考" value={formatPrice(data.tradePlan.stopLossPrice)} trend="bear" />
-          </div>
-        </Block>}
+
         {data.chaseRisk && <Block title="追高風險">
           <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(getRiskTrend(data.chaseRisk.score))}`}>{data.chaseRisk.score} 分｜{data.chaseRisk.level}</div>
           <div className="mt-4 rounded-2xl border border-amber-400/40 bg-slate-950 p-5 leading-7 text-slate-200">{data.chaseRisk.suggestion}</div>
@@ -1585,6 +1589,114 @@ function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeR
         <button type="button" onClick={()=>copyReport(data)} className="w-full rounded-2xl bg-cyan-500 py-4 font-black text-white">複製完整分析報告</button>
       </>}
     </div>
+  </div>
+}
+
+
+type AIDecision = {
+  headline: string;
+  tone: Trend;
+  summary: string;
+  emptyAction: string;
+  holdAction: string;
+  addAction: string;
+  stopAction: string;
+  chaseAction: string;
+  reasons: string[];
+};
+
+function buildAIDecision(data: AnalyzeResult): AIDecision {
+  const tradePlan = data.tradePlan;
+  const chaseRisk = data.chaseRisk;
+  const aiScore = Number(data.ai.score || 0);
+  const riskScore = Number(chaseRisk?.score ?? 50);
+  const stopLoss = tradePlan ? formatPrice(tradePlan.stopLossPrice) : "停損價資料不足";
+  const pullback = tradePlan ? `${formatPrice(tradePlan.pullbackZone.low)} ～ ${formatPrice(tradePlan.pullbackZone.high)}` : "拉回區資料不足";
+  const breakout = tradePlan ? formatPrice(tradePlan.breakoutPrice) : "突破價資料不足";
+
+  let headline = "先觀察，等明確訊號";
+  let tone: Trend = "warning";
+  let summary = "目前訊號沒有強到值得急著進場，先用拉回區、突破價與停損價規劃操作。";
+
+  if (data.ai.trend === "bear" || aiScore <= 40) {
+    headline = "暫不進場，先等止跌";
+    tone = "bear";
+    summary = "AI 分數偏弱或趨勢偏空，現在重點不是找買點，而是等止跌、站回均線或籌碼轉強。";
+  } else if (riskScore >= 75) {
+    headline = "不建議追高，等拉回";
+    tone = "bear";
+    summary = "追高風險已偏高，即使趨勢不差，也不適合用重倉直接追價。";
+  } else if (riskScore >= 55) {
+    headline = "可觀察，但不要重倉追價";
+    tone = "warning";
+    summary = "目前可以列入觀察，但進場節奏要放慢，等拉回或突破確認比直接追高更安全。";
+  } else if (aiScore >= 75 && data.ai.trend === "bull") {
+    headline = "偏多，可用條件式進場";
+    tone = "bull";
+    summary = "趨勢與分數偏多，但仍建議照突破確認與停損規則執行，不要無條件追價。";
+  }
+
+  const emptyAction = tone === "bull"
+    ? `空手可等放量站上 ${breakout}，或拉回 ${pullback} 有止跌訊號時小量試單。`
+    : `空手先不要急著買，優先等股價拉回 ${pullback}，確認止跌後再評估。`;
+
+  const holdAction = `已持有可先看 ${stopLoss} 是否守住；未跌破前以續抱觀察為主，接近壓力或轉弱時分批減碼。`;
+
+  const addAction = riskScore >= 55
+    ? `想加碼先暫停，等突破 ${breakout} 站穩，或拉回 ${pullback} 後重新轉強再考慮。`
+    : `想加碼可分批，不建議一次重倉；突破 ${breakout} 或拉回 ${pullback} 止跌是比較合理的條件。`;
+
+  const stopAction = `若跌破 ${stopLoss}，代表原本交易計畫失效，需考慮停損、減碼或重新等待訊號。`;
+
+  const chaseAction = riskScore >= 55
+    ? `不建議現在追高；目前追高風險 ${riskScore} 分，除非站穩 ${breakout} 且量能配合。`
+    : `追高風險目前 ${riskScore} 分，但仍要用 ${stopLoss} 控制風險，避免看對方向卻重倉受傷。`;
+
+  const reasons = [
+    tradePlan?.stance ? `AI 進場策略：${tradePlan.stance}` : "AI 進場策略資料不足。",
+    chaseRisk ? `追高風險：${chaseRisk.score} 分｜${chaseRisk.level}` : "追高風險資料不足。",
+    data.scoreBreakdown ? `綜合分數：${data.scoreBreakdown.finalScore} 分｜${data.scoreBreakdown.verdict}` : `AI 分數：${data.ai.score} 分｜${data.ai.verdict}`,
+    data.strategyProfile ? `週期判斷：${data.strategyProfile.summary}` : "週期判斷資料不足。",
+  ];
+
+  return { headline, tone, summary, emptyAction, holdAction, addAction, stopAction, chaseAction, reasons };
+}
+
+function AIDecisionCenter({data}:{data:AnalyzeResult}){
+  const decision = buildAIDecision(data);
+  return <Block title="AI 操作決策中心">
+    <div className={`rounded-2xl border px-5 py-4 text-2xl font-black ${getTrendStyle(decision.tone)}`}>
+      {decision.headline}
+    </div>
+    <div className="mt-4 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5 leading-7 text-slate-200">
+      {decision.summary}
+    </div>
+    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+      <DecisionActionCard title="空手的人" text={decision.emptyAction} />
+      <DecisionActionCard title="已持有的人" text={decision.holdAction} />
+      <DecisionActionCard title="想加碼的人" text={decision.addAction} />
+      <DecisionActionCard title="想停損的人" text={decision.stopAction} />
+      <DecisionActionCard title="想追高的人" text={decision.chaseAction} highlight />
+    </div>
+    <ReasonList reasons={decision.reasons} />
+  </Block>
+}
+
+function DecisionActionCard({title,text,highlight}:{title:string;text:string;highlight?:boolean}){
+  return <div className={`rounded-2xl border p-5 ${highlight?"border-orange-400/40 bg-orange-400/10":"border-slate-700 bg-slate-950"}`}>
+    <div className={highlight?"mb-2 font-black text-orange-300":"mb-2 font-black text-cyan-300"}>{title}</div>
+    <div className="leading-7 text-slate-200">{text}</div>
+  </div>
+}
+
+function CycleDecisionRow({title,item}:{title:string;item:{verdict:string;score:number;action:string;reasons:string[]}}){
+  const trend:Trend=item.score>=70?"bull":item.score<=42?"bear":"warning";
+  return <div className={`rounded-2xl border p-4 ${getTrendStyle(trend)}`}>
+    <div className="flex items-center justify-between gap-3">
+      <div className="font-black">{title}</div>
+      <div className="text-lg font-black">{item.verdict}｜{item.score}</div>
+    </div>
+    <div className="mt-2 text-sm leading-6 text-slate-200">{item.action}</div>
   </div>
 }
 
