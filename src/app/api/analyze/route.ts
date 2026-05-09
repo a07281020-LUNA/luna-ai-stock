@@ -1824,6 +1824,7 @@ function buildChaseRisk(params: {
   };
 }
 
+
 function buildTradePlan(params: {
   close: number;
   ma5: number | null;
@@ -1835,51 +1836,70 @@ function buildTradePlan(params: {
 }) {
   const { close, ma5, ma20, supportResistance, chaseRisk, aiScore, aiTrend } = params;
 
-  const observationLow = ma20 ? Math.min(ma20, close * 0.97) : close * 0.97;
-  const observationHigh = ma5 ? Math.max(ma5, close * 1.01) : close * 1.01;
+  const roundPrice = (value: number) => Math.round(value * 100) / 100;
 
-  const pullbackLow = ma20 ? ma20 * 0.98 : supportResistance.low20;
-  const pullbackHigh = ma20 ? ma20 * 1.02 : close * 0.98;
+  const safeSupport20 = supportResistance.low20 || close * 0.94;
+  const safePressure20 = supportResistance.high20 || close * 1.04;
+  const safePressure60 = supportResistance.high60 || safePressure20 * 1.03;
 
-  const breakoutPrice = supportResistance.high20;
-  const stopLossPrice = Math.min(
-    supportResistance.low20,
-    ma20 ? ma20 * 0.97 : supportResistance.low20
-  );
-  const takeProfitReference = supportResistance.high60;
+  const basePullback = ma20 || ma5 || close;
+  const pullbackLow = roundPrice(Math.min(basePullback * 0.97, close * 0.98));
+  const pullbackHigh = roundPrice(Math.min(basePullback * 1.015, close * 1.01));
 
-  let stance = "觀望";
-  let action = "等待更明確的突破或拉回訊號。";
+  const observationLow = roundPrice(Math.min(pullbackLow, safeSupport20 * 1.005));
+  const observationHigh = roundPrice(Math.max(pullbackHigh, ma5 ? ma5 * 1.01 : close * 1.01));
+
+  const breakoutPrice = roundPrice(Math.max(safePressure20 * 1.003, close * 1.006));
+  const stopLossBase = Math.min(safeSupport20, ma20 ? ma20 * 0.965 : safeSupport20);
+  const stopLossPrice = roundPrice(stopLossBase);
+  const takeProfitReference = roundPrice(Math.max(safePressure60, breakoutPrice * 1.03));
+
+  let stance = "中性觀望";
+  let action = "建議動作：暫不追價，等待拉回觀察區或突破確認價站穩後再評估。";
   const reasons: string[] = [];
 
-  if (aiTrend === "bull" && chaseRisk.score <= 55) {
-    stance = "偏多觀察";
-    action = "可分批觀察，不建議一次重倉。若拉回到觀察區不破，可留意轉強機會。";
-    reasons.push("AI 趨勢偏多，且追高風險未達高風險區。");
-  } else if (aiTrend === "bull" && chaseRisk.score > 55) {
+  if (aiTrend === "bull" && aiScore >= 75 && chaseRisk.score <= 45) {
+    stance = "偏多可分批";
+    action = `建議動作：可小量分批觀察，優先看 ${observationLow} ～ ${observationHigh} 是否有承接；若直接漲到突破價附近，不建議一次重倉追高。`;
+    reasons.push("AI 趨勢偏多且追高風險不高，允許分批觀察。");
+  } else if (aiTrend === "bull" && chaseRisk.score <= 65) {
+    stance = "偏多等確認";
+    action = `建議動作：趨勢偏多，但建議等拉回 ${pullbackLow} ～ ${pullbackHigh} 或突破 ${breakoutPrice} 後站穩再進，不要看到上漲就直接追。`;
+    reasons.push("AI 趨勢偏多，但仍需要拉回承接或突破站穩確認。");
+  } else if (aiTrend === "bull" && chaseRisk.score > 65) {
     stance = "偏多但不追高";
-    action = "趨勢雖偏多，但追高風險偏高，建議等拉回或突破後站穩。";
-    reasons.push("AI 趨勢偏多，但追高風險分數偏高。");
+    action = `建議動作：不追高。股價若拉回 ${pullbackLow} ～ ${pullbackHigh} 且沒有跌破停損參考 ${stopLossPrice}，再重新評估；若直接衝高，寧願錯過。`;
+    reasons.push("AI 趨勢偏多，但追高風險偏高，短線容易買在震盪點。");
   } else if (aiTrend === "bear") {
     stance = "偏空保守";
-    action = "目前不建議追價，先等待止跌、站回均線或重新放量轉強。";
-    reasons.push("AI 趨勢偏弱，應避免急著進場。");
+    action = `建議動作：暫不進場。先等站回觀察區上緣 ${observationHigh} 或重新放量突破 ${breakoutPrice}，否則以保守觀望為主。`;
+    reasons.push("AI 趨勢偏弱，優先控制風險，不應急著接刀或追反彈。");
   } else {
-    stance = "中性觀望";
-    action = "目前訊號未明確，可等待股價靠近支撐或突破壓力後再判斷。";
+    stance = "中性等訊號";
+    action = `建議動作：等待訊號。拉回觀察區 ${pullbackLow} ～ ${pullbackHigh} 有守再看；突破確認價 ${breakoutPrice} 站穩才代表多方更明確。`;
     reasons.push("AI 分數位於中性區間，尚未形成明確方向。");
   }
 
   if (supportResistance.trend === "warning") {
-    reasons.push("目前接近20日壓力，追價空間有限。");
+    reasons.push("目前接近20日壓力，追價空間有限，應優先等拉回或突破站穩。");
   }
 
   if (supportResistance.trend === "bull") {
-    reasons.push("股價已突破近期壓力，若能站穩，偏多訊號更完整。");
+    reasons.push("股價已突破近期壓力，後續重點是能不能站穩突破價。");
+  }
+
+  if (supportResistance.trend === "bear") {
+    reasons.push("股價跌破近期支撐，停損與資金控管要優先於進場。");
+  }
+
+  if (chaseRisk.score >= 75) {
+    reasons.push("不追高提醒：追高風險已達高檔，短線容易出現拉回或震盪。");
+  } else if (chaseRisk.score >= 55) {
+    reasons.push("不追高提醒：追高風險中高，適合分批或等拉回，不適合重倉一次買進。");
   }
 
   if (aiScore >= 85) {
-    reasons.push("AI 分數高，屬於強勢股，但仍需控管追高風險。");
+    reasons.push("AI 分數很高代表強勢，但強勢股最怕買在乖離過大位置。");
   }
 
   return {
@@ -1899,6 +1919,7 @@ function buildTradePlan(params: {
     reasons,
   };
 }
+
 
 function buildAiSummary(params: {
   ma5: number | null;
@@ -1928,36 +1949,55 @@ function buildAiSummary(params: {
   let score = 50;
   const reasons: string[] = [];
 
-  if (ma5 !== null && ma20 !== null) {
-    if (ma5 > ma20) {
-      score += 15;
-      reasons.push("MA5 高於 MA20，短線均線偏多。");
-    } else {
-      score -= 15;
-      reasons.push("MA5 低於 MA20，短線均線偏弱。");
-    }
-  }
-
-  if (ma20 !== null && ma60 !== null) {
-    if (ma20 > ma60) {
+  if (ma5 !== null && ma20 !== null && ma60 !== null) {
+    if (ma5 > ma20 && ma20 > ma60) {
+      score += 22;
+      reasons.push("MA5、MA20、MA60 呈多頭排列，趨勢結構偏強。");
+    } else if (ma5 < ma20 && ma20 < ma60) {
+      score -= 22;
+      reasons.push("MA5、MA20、MA60 呈空頭排列，趨勢結構偏弱。");
+    } else if (ma5 > ma20) {
       score += 10;
-      reasons.push("MA20 高於 MA60，中期趨勢較健康。");
+      reasons.push("MA5 高於 MA20，短線均線轉強。");
     } else {
       score -= 10;
-      reasons.push("MA20 低於 MA60，中期趨勢仍有壓力。");
+      reasons.push("MA5 低於 MA20，短線均線偏弱。");
+    }
+  } else {
+    if (ma5 !== null && ma20 !== null) {
+      if (ma5 > ma20) {
+        score += 12;
+        reasons.push("MA5 高於 MA20，短線均線偏多。");
+      } else {
+        score -= 12;
+        reasons.push("MA5 低於 MA20，短線均線偏弱。");
+      }
+    }
+
+    if (ma20 !== null && ma60 !== null) {
+      if (ma20 > ma60) {
+        score += 10;
+        reasons.push("MA20 高於 MA60，中期趨勢較健康。");
+      } else {
+        score -= 10;
+        reasons.push("MA20 低於 MA60，中期趨勢仍有壓力。");
+      }
     }
   }
 
   if (rsi14 !== null) {
-    if (rsi14 >= 75) {
-      score -= 10;
-      reasons.push("RSI 高於 75，短線過熱，追價風險增加。");
+    if (rsi14 >= 80) {
+      score -= 14;
+      reasons.push("RSI 高於 80，短線明顯過熱，不適合追價。");
+    } else if (rsi14 >= 70) {
+      score -= 7;
+      reasons.push("RSI 高於 70，動能強但追高風險上升。");
     } else if (rsi14 >= 55) {
-      score += 10;
+      score += 12;
       reasons.push("RSI 位於 55 以上，買盤動能偏強。");
     } else if (rsi14 <= 30) {
-      score -= 5;
-      reasons.push("RSI 低於 30，股價偏弱但可能接近超賣區。");
+      score -= 8;
+      reasons.push("RSI 低於 30，股價偏弱，需等止跌訊號。");
     } else {
       reasons.push("RSI 位於中性區間，多空尚未極端。");
     }
@@ -1965,60 +2005,71 @@ function buildAiSummary(params: {
 
   if (macdValue !== null) {
     if (macdValue > 0) {
-      score += 12;
+      score += 14;
       reasons.push("MACD 位於零軸上方，多方動能較強。");
     } else {
-      score -= 12;
+      score -= 14;
       reasons.push("MACD 位於零軸下方，空方壓力仍在。");
     }
   }
 
   if (kdValue !== null) {
-    if (kdValue >= 80) {
-      reasons.push("KD 位於高檔，短線要防震盪或拉回。");
+    if (kdValue >= 85) {
+      score -= 7;
+      reasons.push("KD 位於高檔，短線容易震盪或拉回。");
     } else if (kdValue <= 20) {
-      reasons.push("KD 位於低檔，需觀察是否止跌反彈。");
+      score -= 4;
+      reasons.push("KD 位於低檔，需觀察是否止跌反彈，不能只因低檔就買。");
+    } else if (kdValue >= 50 && kdValue < 80) {
+      score += 5;
+      reasons.push("KD 位於中高檔但未過熱，短線動能尚可。");
     } else {
       reasons.push("KD 位於中段，尚未出現極端訊號。");
     }
   }
 
   if (volumeTrend === "bull") {
-    score += 8;
+    score += 12;
     reasons.push("量能配合股價上攻，短線多方訊號更完整。");
   } else if (volumeTrend === "bear") {
-    score -= 10;
+    score -= 14;
     reasons.push("放量下跌代表賣壓偏重，短線風險升高。");
   } else if (volumeTrend === "warning") {
-    score -= 5;
-    reasons.push("股價上漲但量能不足，追價需要更保守。");
+    score -= 8;
+    reasons.push("股價上漲但量能不足，追價可靠度下降。");
   }
 
   if (supportTrend === "bull") {
-    score += 10;
+    score += 12;
     reasons.push("股價突破近期壓力區，短線趨勢有轉強跡象。");
   } else if (supportTrend === "bear") {
-    score -= 10;
+    score -= 14;
     reasons.push("股價跌破近期支撐區，短線風險提高。");
   } else if (supportTrend === "warning") {
-    score -= 5;
+    score -= 8;
     reasons.push("股價接近壓力區，追價空間有限。");
   }
 
   if (patternTrend === "bull") {
-    score += 8;
+    score += 10;
     reasons.push("K線型態偏多，短線盤勢結構較強。");
   } else if (patternTrend === "bear") {
-    score -= 8;
+    score -= 10;
     reasons.push("K線型態偏空，短線盤勢結構較弱。");
   } else if (patternTrend === "warning") {
-    score -= 4;
+    score -= 6;
     reasons.push("K線型態出現警示訊號，需防震盪或假突破。");
   }
 
-  if (chaseRiskScore >= 75) {
+  if (chaseRiskScore >= 80) {
+    score -= 14;
+    reasons.push("追高風險分數高於 80，短線不宜追價。");
+  } else if (chaseRiskScore >= 65) {
     score -= 8;
-    reasons.push("追高風險分數偏高，短線不宜過度積極。");
+    reasons.push("追高風險分數偏高，需等拉回或突破站穩。");
+  } else if (chaseRiskScore <= 35) {
+    score += 4;
+    reasons.push("追高風險較低，進場位置相對不那麼擁擠。");
   }
 
   score = Math.max(0, Math.min(100, Math.round(score)));
@@ -2026,24 +2077,22 @@ function buildAiSummary(params: {
   let verdict = "觀望";
   let trend = "neutral";
 
-  if (score >= 70) {
-    verdict = "偏多";
+  if (score >= 72) {
+    verdict = chaseRiskScore >= 70 ? "偏多但高風險" : "偏多";
     trend = "bull";
   } else if (score <= 40) {
     verdict = "偏空";
     trend = "bear";
   }
 
-  let chaseRisk = "不建議盲目追價，等拉回或突破確認會比較安全。";
+  let chaseRisk = "不建議盲目追價，等拉回觀察區或突破確認價站穩會比較安全。";
 
-  if (score >= 70 && chaseRiskScore <= 45) {
+  if (score >= 72 && chaseRiskScore <= 45) {
     chaseRisk = "趨勢偏多且追高風險不高，可分批觀察，但仍要設好停損。";
-  } else if (score >= 70 && chaseRiskScore > 65) {
-    chaseRisk = "雖然趨勢偏多，但追高風險偏高，建議等拉回或站穩突破再評估。";
-  }
-
-  if (score <= 40) {
-    chaseRisk = "趨勢偏弱，不建議追價，應先等止跌訊號。";
+  } else if (score >= 72 && chaseRiskScore > 65) {
+    chaseRisk = "雖然趨勢偏多，但追高風險偏高，建議等拉回或突破確認後再評估。";
+  } else if (score <= 40) {
+    chaseRisk = "趨勢偏弱，不建議追價，應先等止跌與重新轉強訊號。";
   }
 
   return {
@@ -2054,7 +2103,6 @@ function buildAiSummary(params: {
     chaseRisk,
   };
 }
-
 
 function normalizeScore(value: number | null | undefined, fallback = 50) {
   if (value === null || typeof value === "undefined" || Number.isNaN(Number(value))) return fallback;
@@ -2157,6 +2205,7 @@ function buildAbnormalAlerts(params: {
   return alerts.slice(0, 8);
 }
 
+
 function buildStrategyProfile(params: {
   scoreBreakdown: ScoreBreakdown;
   ai: ReturnType<typeof buildAiSummary>;
@@ -2166,34 +2215,105 @@ function buildStrategyProfile(params: {
   chaseRisk: ReturnType<typeof buildChaseRisk>;
   tradePlan: ReturnType<typeof buildTradePlan>;
 }): StrategyProfile {
-  const shortScore = Math.round(params.ai.score * 0.45 + params.chipAnalysis.score * 0.25 + params.marketEnvironment.score * 0.15 + (100 - params.chaseRisk.score) * 0.15);
-  const swingScore = Math.round(params.scoreBreakdown.finalScore * 0.45 + params.chipAnalysis.score * 0.25 + params.fundamentalAnalysis.score * 0.2 + params.marketEnvironment.score * 0.1);
-  const longScore = Math.round(params.fundamentalAnalysis.score * 0.45 + params.marketEnvironment.score * 0.2 + params.scoreBreakdown.finalScore * 0.2 + params.chipAnalysis.score * 0.15);
+  const antiChase = 100 - params.chaseRisk.score;
+
+  let shortScore = Math.round(
+    params.ai.score * 0.55 +
+    antiChase * 0.25 +
+    params.chipAnalysis.score * 0.12 +
+    params.marketEnvironment.score * 0.08
+  );
+
+  let swingScore = Math.round(
+    params.scoreBreakdown.finalScore * 0.34 +
+    params.chipAnalysis.score * 0.26 +
+    params.fundamentalAnalysis.score * 0.18 +
+    params.marketEnvironment.score * 0.14 +
+    params.ai.score * 0.08
+  );
+
+  let longScore = Math.round(
+    params.fundamentalAnalysis.score * 0.50 +
+    params.marketEnvironment.score * 0.22 +
+    params.chipAnalysis.score * 0.13 +
+    params.scoreBreakdown.finalScore * 0.10 +
+    params.ai.score * 0.05
+  );
+
+  if (params.chaseRisk.score >= 75) shortScore -= 16;
+  else if (params.chaseRisk.score >= 60) shortScore -= 9;
+  else if (params.chaseRisk.score <= 35) shortScore += 4;
+
+  if (params.marketEnvironment.trend === "bear") {
+    shortScore -= 6;
+    swingScore -= 8;
+    longScore -= 5;
+  }
+
+  if (params.fundamentalAnalysis.trend === "bear") {
+    swingScore -= 6;
+    longScore -= 12;
+  }
+
+  if (params.fundamentalAnalysis.trend === "bull") {
+    longScore += 8;
+  }
+
+  shortScore = normalizeScore(shortScore);
+  swingScore = normalizeScore(swingScore);
+  longScore = normalizeScore(longScore);
 
   function verdict(score: number) {
-    if (score >= 70) return "可觀察";
-    if (score <= 42) return "偏保守";
+    if (score >= 76) return "積極觀察";
+    if (score >= 65) return "可觀察";
+    if (score <= 40) return "偏保守";
     return "等待訊號";
   }
 
+  function shortAction() {
+    if (shortScore >= 76 && params.chaseRisk.score <= 45) return "建議動作：可小量分批觀察，仍要用停損參考價控管風險。";
+    if (shortScore >= 65 && params.chaseRisk.score <= 65) return "建議動作：等拉回觀察區承接，或突破確認價站穩後再分批。";
+    if (params.chaseRisk.score >= 70) return "建議動作：不追高，優先等拉回或風險分數下降。";
+    return "建議動作：先觀望，等待量價、型態或突破訊號更明確。";
+  }
+
+  function swingAction() {
+    if (swingScore >= 76) return "建議動作：可列入波段優先觀察，分批布局並以支撐區作風控。";
+    if (swingScore >= 65) return "建議動作：可放入波段觀察名單，等籌碼或突破確認再提高部位。";
+    if (swingScore <= 40) return "建議動作：波段不急，等待籌碼、均線或基本面改善。";
+    return "建議動作：暫時等待，等綜合分數與籌碼同步轉強。";
+  }
+
+  function longAction() {
+    if (longScore >= 76) return "建議動作：可持續追蹤長期基本面，分批而不是一次買滿。";
+    if (longScore >= 65) return "建議動作：可中長期追蹤，但仍要確認營收、EPS與產業趨勢。";
+    if (longScore <= 40) return "建議動作：長期投入前應先避開基本面或大盤逆風。";
+    return "建議動作：長期訊號普通，先觀察財報與產業題材是否改善。";
+  }
+
   const shortTermReasons = [
-    `短線主要看技術、籌碼與追高風險，目前短線分數 ${shortScore}。`,
-    `參考動作：${params.tradePlan.action}`,
+    `短線權重重排：技術 55%、不追高風險 25%、籌碼 12%、大盤 8%，目前短線分數 ${shortScore}。`,
+    `拉回觀察區：${params.tradePlan.pullbackZone.low} ～ ${params.tradePlan.pullbackZone.high}；突破確認價：${params.tradePlan.breakoutPrice}；停損參考：${params.tradePlan.stopLossPrice}。`,
+    `追高風險：${params.chaseRisk.score} 分，${params.chaseRisk.suggestion}`,
   ];
+
   const swingReasons = [
-    `波段同時看綜合分數、籌碼與基本面，目前波段分數 ${swingScore}。`,
+    `波段權重重排：綜合分數 34%、籌碼 26%、基本面 18%、大盤 14%、技術 8%，目前波段分數 ${swingScore}。`,
     params.chipAnalysis.summary,
+    params.scoreBreakdown.verdict === "偏多但高風險" ? "綜合分數雖偏多，但風險修正提醒不可追高。" : `綜合判斷為 ${params.scoreBreakdown.verdict}。`,
   ];
+
   const longReasons = [
-    `長期較重視基本面與大盤環境，目前長期分數 ${longScore}。`,
+    `長期權重重排：基本面 50%、大盤 22%、籌碼 13%、綜合 10%、技術 5%，目前長期分數 ${longScore}。`,
     params.fundamentalAnalysis.summary,
+    params.marketEnvironment.summary,
   ];
 
   return {
-    shortTerm: { verdict: verdict(shortScore), score: shortScore, action: shortScore >= 70 && params.chaseRisk.score <= 65 ? "可小量分批觀察，避免一次重倉。" : "先等拉回、突破站穩或風險下降。", reasons: shortTermReasons },
-    swing: { verdict: verdict(swingScore), score: swingScore, action: swingScore >= 70 ? "可列入波段觀察清單，搭配支撐停損。" : "等待籌碼或基本面分數改善。", reasons: swingReasons },
-    longTerm: { verdict: verdict(longScore), score: longScore, action: longScore >= 70 ? "可持續追蹤基本面與營收趨勢。" : "長期投入前應確認營收、EPS與產業趨勢。", reasons: longReasons },
-    summary: `短線 ${verdict(shortScore)}、波段 ${verdict(swingScore)}、長期 ${verdict(longScore)}。`,
+    shortTerm: { verdict: verdict(shortScore), score: shortScore, action: shortAction(), reasons: shortTermReasons },
+    swing: { verdict: verdict(swingScore), score: swingScore, action: swingAction(), reasons: swingReasons },
+    longTerm: { verdict: verdict(longScore), score: longScore, action: longAction(), reasons: longReasons },
+    summary: `短線 ${verdict(shortScore)} ${shortScore} 分、波段 ${verdict(swingScore)} ${swingScore} 分、長期 ${verdict(longScore)} ${longScore} 分。三種分數已用不同權重計算，不再用同一套邏輯硬套。`,
   };
 }
 

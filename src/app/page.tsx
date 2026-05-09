@@ -490,7 +490,7 @@ function buildAnalysisReport(data: AnalyzeResult) {
   }
 
   if (data.strategyProfile) {
-    lines.push(`策略分層：${data.strategyProfile.summary}`);
+    lines.push(`短線 / 波段 / 長期策略分層：${data.strategyProfile.summary}`);
     lines.push(`短線：${data.strategyProfile.shortTerm.verdict}｜${data.strategyProfile.shortTerm.score}｜${data.strategyProfile.shortTerm.action}`);
     lines.push(`波段：${data.strategyProfile.swing.verdict}｜${data.strategyProfile.swing.score}｜${data.strategyProfile.swing.action}`);
     lines.push(`長期：${data.strategyProfile.longTerm.verdict}｜${data.strategyProfile.longTerm.score}｜${data.strategyProfile.longTerm.action}`);
@@ -517,7 +517,7 @@ function buildAnalysisReport(data: AnalyzeResult) {
 
   if (data.tradePlan) {
     lines.push(`交易計畫：${data.tradePlan.stance}`);
-    lines.push(`操作節奏：${data.tradePlan.action}`);
+    lines.push(`建議動作：${data.tradePlan.action}`);
     lines.push(`觀察區：${formatPrice(data.tradePlan.observationZone.low)} ～ ${formatPrice(data.tradePlan.observationZone.high)}`);
     lines.push(`拉回觀察：${formatPrice(data.tradePlan.pullbackZone.low)} ～ ${formatPrice(data.tradePlan.pullbackZone.high)}`);
     lines.push(`突破確認價：${formatPrice(data.tradePlan.breakoutPrice)}`);
@@ -885,7 +885,7 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
         <ReasonList reasons={data.scoreBreakdown.reasons} />
       </Block>}
 
-      {data.strategyProfile && <Block title="短線 / 波段 / 長期策略分層">
+      {data.strategyProfile && <Block title="短線 / 波段 / 長期策略分層（新版權重）">
         <div className="mb-5 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5">
           <div className="mb-2 font-black text-cyan-400">策略總結</div>
           <div className="leading-7 text-slate-200">{data.strategyProfile.summary}</div>
@@ -1565,12 +1565,14 @@ function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeR
             <StrategyCard title="長期" item={data.strategyProfile.longTerm} />
           </div>
         </Block>}
-        {data.tradePlan && <Block title="交易計畫">
+        {data.tradePlan && <Block title="AI 進場策略">
           <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.ai.trend)}`}>{data.tradePlan.stance}</div>
           <div className="mt-4 rounded-2xl border border-cyan-400/30 bg-slate-950 p-5 leading-7 text-slate-200">{data.tradePlan.action}</div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <Metric label="觀察下緣" value={formatPrice(data.tradePlan.observationZone.low)} />
             <Metric label="觀察上緣" value={formatPrice(data.tradePlan.observationZone.high)} />
+            <Metric label="拉回下緣" value={formatPrice(data.tradePlan.pullbackZone.low)} />
+            <Metric label="拉回上緣" value={formatPrice(data.tradePlan.pullbackZone.high)} />
             <Metric label="突破確認" value={formatPrice(data.tradePlan.breakoutPrice)} trend="bull" />
             <Metric label="停損參考" value={formatPrice(data.tradePlan.stopLossPrice)} trend="bear" />
           </div>
