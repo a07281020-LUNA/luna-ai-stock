@@ -516,7 +516,7 @@ function buildAnalysisReport(data: AnalyzeResult) {
   }
 
   if (data.tradePlan) {
-    lines.push(`交易計畫：${data.tradePlan.stance}`);
+    lines.push(`AI 進場策略：${data.tradePlan.stance}`);
     lines.push(`建議動作：${data.tradePlan.action}`);
     lines.push(`觀察區：${formatPrice(data.tradePlan.observationZone.low)} ～ ${formatPrice(data.tradePlan.observationZone.high)}`);
     lines.push(`拉回觀察：${formatPrice(data.tradePlan.pullbackZone.low)} ～ ${formatPrice(data.tradePlan.pullbackZone.high)}`);
@@ -800,7 +800,7 @@ export default function Home(){
                 <StatusRow label="成交量分析" value="已啟用" />
                 <StatusRow label="支撐壓力分析" value="已啟用" />
                 <StatusRow label="追高風險分數" value="已啟用" />
-                <StatusRow label="交易計畫" value="已啟用" />
+                <StatusRow label="AI 進場策略" value="已啟用" />
                 <StatusRow label="基本面財報" value={getFundamentalStatusText(data)} valueClassName={getFundamentalStatusStyle(data)} />
                 <StatusRow label="產業題材" value={getModuleStatusText(data?.sourceStatus?.industry)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.industry)} />
                 <StatusRow label="大盤環境" value={getModuleStatusText(data?.sourceStatus?.market)} valueClassName={getModuleStatusStyle(data?.sourceStatus?.market)} />
@@ -1128,7 +1128,7 @@ function AnalysisContent({data,setData,scanResults,copyReport}:{data:AnalyzeResu
         <ReasonList reasons={data.patternAnalysis.reasons} />
       </Block>}
 
-      {data.tradePlan && <Block title="交易計畫 / 進場區間">
+      {data.tradePlan && <Block title="AI 進場策略">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className={`rounded-2xl border px-5 py-3 text-xl font-black ${getTrendStyle(data.ai.trend)}`}>{data.tradePlan.stance}</div>
           <div className="text-sm text-slate-400">依 K棒、壓力支撐、追高風險自動產生</div>
@@ -1409,7 +1409,7 @@ function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeR
         {tabs.map((tab)=><button key={tab.key} type="button" onClick={()=>setActiveTab(tab.key)} className={activeTab===tab.key?"rounded-2xl border border-cyan-300 bg-cyan-500 px-3 py-3 text-center font-black text-white shadow-lg shadow-cyan-500/30 ring-2 ring-cyan-300/30 md:px-4 md:py-4":"rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-center font-bold text-slate-300 hover:border-cyan-400/60 hover:bg-slate-800 hover:text-cyan-200 md:px-4 md:py-4"}>
           <div className="text-xl md:text-2xl">{tab.icon}</div>
           <div className="mt-1 text-sm md:text-base">{tab.label}</div>
-          <div className={activeTab===tab.key?"mt-1 hidden text-xs text-cyan-50/90 md:block":"mt-1 hidden text-xs text-slate-500 md:block"}>{tab.hint}</div>
+          <div className={activeTab===tab.key?"mt-1 block text-[10px] leading-tight text-cyan-50/90 md:text-xs":"mt-1 block text-[10px] leading-tight text-slate-500 md:text-xs"}>{tab.hint}</div>
         </button>)}
       </div>
     </div>
