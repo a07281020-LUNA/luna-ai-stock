@@ -1406,10 +1406,10 @@ function MobileAnalysisTabs({data,scanResults,setData,copyReport}:{data:AnalyzeR
         <div className="text-sm text-slate-400">不用再一路往下滑</div>
       </div>
       <div className="grid grid-cols-3 gap-2 md:grid-cols-6 md:gap-3">
-        {tabs.map((tab)=><button key={tab.key} type="button" onClick={()=>setActiveTab(tab.key)} className={activeTab===tab.key?"rounded-2xl border border-cyan-300 bg-cyan-500 px-3 py-3 text-center font-black text-white shadow-lg shadow-cyan-500/30 ring-2 ring-cyan-300/30 md:px-4 md:py-4":"rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-center font-bold text-slate-300 hover:border-cyan-400/60 hover:bg-slate-800 hover:text-cyan-200 md:px-4 md:py-4"}>
-          <div className="text-xl md:text-2xl">{tab.icon}</div>
-          <div className="mt-1 text-sm md:text-base">{tab.label}</div>
-          <div className={activeTab===tab.key?"mt-1 block text-[10px] leading-tight text-cyan-50/90 md:text-xs":"mt-1 block text-[10px] leading-tight text-slate-500 md:text-xs"}>{tab.hint}</div>
+        {tabs.map((tab)=><button key={tab.key} type="button" onClick={()=>setActiveTab(tab.key)} className={activeTab===tab.key?"flex min-h-[88px] flex-col items-center justify-center rounded-2xl border border-cyan-300 bg-cyan-500 px-3 py-3 text-center font-black text-white shadow-lg shadow-cyan-500/30 ring-2 ring-cyan-300/30 md:min-h-[96px] md:px-4 md:py-4":"flex min-h-[88px] flex-col items-center justify-center rounded-2xl border border-slate-700 bg-slate-900 px-3 py-3 text-center font-bold text-slate-300 hover:border-cyan-400/60 hover:bg-slate-800 hover:text-cyan-200 md:min-h-[96px] md:px-4 md:py-4"}>
+          <div className="text-xl leading-none md:text-2xl">{tab.icon}</div>
+          <div className="mt-2 text-sm leading-none md:text-base">{tab.label}</div>
+          <div className={activeTab===tab.key?"mt-2 block text-[10px] font-black leading-none text-cyan-50 opacity-100 md:text-xs":"mt-2 block text-[10px] font-bold leading-none text-slate-400 opacity-100 md:text-xs"}>{tab.hint}</div>
         </button>)}
       </div>
     </div>
